@@ -172,6 +172,44 @@ class Navigator:
     def to_image(self, gx, gy):
         return gx * self.DS + self.DS // 2, gy * self.DS + self.DS // 2
 
+    def snap_to_reachable(self, px, py):
+        """如果当前位置不可达，找最近的可达点"""
+        # 检查在原图可达图上是否可达
+        if (0 <= px < self.w and 0 <= py < self.h and
+                self.reachable[py, px] > 127):
+            return px, py  # 已在可达区
+
+        # 在降采样网格上做 BFS 找最近可达点
+        gx, gy = self.to_grid(px, py)
+        gh, gw = self.grid.shape
+        if not (0 <= gx < gw and 0 <= gy < gh):
+            return px, py
+
+        from collections import deque
+        visited = np.zeros((gh, gw), dtype=np.uint8)
+        q = deque([(gx, gy, 0)])
+        visited[gy, gx] = 1
+        dirs = [(0,1),(1,0),(0,-1),(-1,0),(1,1),(1,-1),(-1,1),(-1,-1)]
+
+        while q:
+            cx, cy, dist = q.popleft()
+            if self.grid[cy, cx] > 0:
+                # 找到最近可达格 → 映射回原图
+                ix, iy = self.to_image(cx, cy)
+                print(f"[吸附] ({px},{py}) → ({ix},{iy}) "
+                      f"距离≈{dist*self.DS}px")
+                return ix, iy
+            if dist > 50:  # 最多搜 50 格 (~200px)
+                break
+            for dx, dy in dirs:
+                nx, ny = cx + dx, cy + dy
+                if 0 <= nx < gw and 0 <= ny < gh and not visited[ny, nx]:
+                    visited[ny, nx] = 1
+                    q.append((nx, ny, dist + 1))
+
+        print(f"[吸附] ({px},{py}) 未找到可达点，保持原位置")
+        return px, py
+
     def scr2img(self, sx, sy):
         ix = int((sx - self.offset_x) / self.scale)
         iy = int((sy - self.offset_y) / self.scale)
@@ -239,7 +277,10 @@ class Navigator:
             self.position = self.tracker.last_position
         px, py = self.position if self.position else self.start
 
-        # 2. 检查是否到达终点
+        # 2. 吸附到最近可达点（战斗后可能被炸到不可达区）
+        px, py = self.snap_to_reachable(px, py)
+
+        # 3. 检查是否到达终点
         gx, gy = self.goal
         if np.hypot(px - gx, py - gy) < WAYPOINT_REACH_THRESHOLD * 3:
             print("[!] 到达终点!")
