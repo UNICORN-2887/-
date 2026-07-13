@@ -1,0 +1,25 @@
+# DeadMaze - 光流法建图与定位
+# 一键安装依赖
+
+# 核心
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# 屏幕采集
+mss>=10.0.0
+PyAutoGUI>=0.9.54
+
+# OCR
+pytesseract>=0.3.10
+
+# YOLO
+ultralytics>=8.0.0
+
+# 标注工具
+label-studio>=1.23.0
+
+# Windows GUI 操控
+pywin32>=306
+
+# 图像分割（可选）
+segment-anything>=1.0

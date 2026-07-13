@@ -1,0 +1,17 @@
+<!--
+DeadMaze 标志物标注 - Label Studio 标注界面配置
+用于 YOLO 目标检测，6 个标志物类别
+-->
+<View>
+  <Header value="DeadMaze 标志物标注"/>
+  <Image name="image" value="$image" zoom="true" zoomControl="true"/>
+
+  <RectangleLabels name="label" toName="image" showInline="false">
+    <Label value="Bike"        background="#E53935" strokeColor="#B71C1C"/>
+    <Label value="Psign"       background="#43A047" strokeColor="#2E7D32"/>
+    <Label value="Campfire"    background="#FB8C00" strokeColor="#EF6C00"/>
+    <Label value="Sleepbag"    background="#1E88E5" strokeColor="#1565C0"/>
+    <Label value="TreeShadow1" background="#8E24AA" strokeColor="#6A1B9A"/>
+    <Label value="DeadTree1"   background="#00ACC1" strokeColor="#00838F"/>
+  </RectangleLabels>
+</View>

@@ -1,0 +1,34 @@
+# 数据文件
+pic/
+*.jpg
+*.jpeg
+*.png
+map_output*.jpg
+cropped_*/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Label Studio
+label_studio/images/
+label_studio/yolo_labels/
+
+# IDE
+.vscode/
+.idea/
+
+# 模型
+models/
+*.pt
+*.pth
+
+# 临时
+*.json
+!label_studio/*.json
+
+# 配置文件（本地）
+map_stitcher_crop.json
