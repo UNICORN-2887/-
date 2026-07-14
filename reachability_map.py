@@ -51,6 +51,12 @@ class ReachabilityEditor:
         self.poly_points = []         # 顶点列表 [(ix,iy), ...]
         self.poly_color = 255         # 填充颜色（左键=白, 右键=黑）
 
+        # 门标记模式
+        self.door_mode = False        # True=门标记模式
+        self.doors = []               # [(x, y, dx, dy), ...] 门位置+方向
+        self._pending_door = None     # (ix, iy) 等待选方向
+        self._load_doors()
+
     # ============================================================
     # 坐标
     # ============================================================
@@ -165,18 +171,44 @@ class ReachabilityEditor:
                 cv2.circle(canvas, pts[i], 4, (0, 255, 255), -1)
                 if i > 0:
                     cv2.line(canvas, pts[i-1], pts[i], (0, 255, 255), 2)
+
+        # 待选方向的门（闪烁黄点）
+        if self._pending_door:
+            px, py = self._pending_door
+            sx = int(px * self.scale + self.offset_x)
+            sy = int(py * self.scale + self.offset_y)
+            cv2.circle(canvas, (sx, sy), 8, (0, 255, 255), -1)
+            cv2.putText(canvas, "1=左上-右下 2=右上-左下", (sx+10, sy-10),
+                        FONT, 0.35, (0, 255, 255), 1)
+
+        # 门标记（紫色圆点+方向箭头）
+        for i, (dx, dy, ddx, ddy) in enumerate(self.doors):
+            sx = int(dx * self.scale + self.offset_x)
+            sy = int(dy * self.scale + self.offset_y)
+            cv2.circle(canvas, (sx, sy), 6, (255, 0, 255), -1)
+            cv2.arrowedLine(canvas, (sx, sy),
+                     (int(sx + ddx * 30), int(sy + ddy * 30)),
+                     (255, 0, 255), 2, tipLength=0.4)
+            cv2.putText(canvas, f"D{i+1}", (sx+8, sy-8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 0, 255), 1)
             # 鼠标到最后一个点的虚线
             # (虚线在 mouse move 里画不了，这里留空)
 
         walkable = np.sum(self.binary == 255) / self.binary.size * 100
         view_names = ["叠加", "二值", "原图"]
-        mode_str = "描边" if self.poly_mode else "涂刷"
+        color_label = "白(可达)" if self.poly_color == 255 else "黑(不可达)"
+        if self.door_mode:
+            mode_str = "门标记"
+        elif self.poly_mode:
+            mode_str = f"描边[{color_label}]"
+        else:
+            mode_str = "涂刷"
         info = (f"[{mode_str}] 可行走={walkable:.1f}% | "
                 f"缩放={self.scale*100:.0f}% | 画笔={self.brush_size}px | "
                 f"视图: {view_names[self.show_mode]}")
         cv2.putText(canvas, info, (5, 18), FONT, 0.38, (0, 255, 0), 1)
         cv2.putText(canvas,
-                    "P=描边模式 左键=加顶点 右键=填充 "
+                    "P=描边 D=标记门 左/右键=操作 F=切换颜色 "
                     "IJKL=平移 +/-=缩放 1-4画笔 T=视图 S=保存 Q=退出",
                     (5, VH - 6), FONT, 0.3, (180, 180, 180), 1)
         return canvas
@@ -195,8 +227,66 @@ class ReachabilityEditor:
         print(f"[描边] 填充{len(self.poly_points)}边形 → {label}")
         self.poly_points = []
 
+    # ============================================================
+    # 门标记
+    # ============================================================
+    def _door_file(self):
+        return f"{self.base}_doors.json"
+
+    def _load_doors(self):
+        path = self._door_file()
+        if os.path.exists(path):
+            import json
+            with open(path, 'r') as f:
+                self.doors = json.load(f)
+            print(f"[门] 加载 {len(self.doors)} 个门")
+
+    def _save_doors(self):
+        import json
+        with open(self._door_file(), 'w') as f:
+            json.dump(self.doors, f)
+        print(f"[门] 保存 {len(self.doors)} 个门")
+
+    def _add_door(self, ix, iy):
+        """放置门位置，等待选择方向"""
+        self._pending_door = (ix, iy)
+        print(f"[门] 位置({ix},{iy}) 请按方向: 1=左上↔右下 2=右上↔左下")
+
+    def _set_door_dir(self, dir_idx):
+        """1=左上↔右下  2=右上↔左下  门双向通行"""
+        if self._pending_door is None:
+            print("[门] 请先点击放置门位置")
+            return
+        dirs = [(1, 1), (1, -1)]  # 0=左上↔右下  1=右上↔左下
+        if dir_idx not in [0, 1]:
+            print("[门] 请按1(左上↔右下)或2(右上↔左下)")
+            return
+        dx, dy = dirs[dir_idx]
+        ix, iy = self._pending_door
+        self.doors.append((ix, iy, dx, dy))
+        label = "左上↔右下" if dy == 1 else "右上↔左下"
+        print(f"[门] #{len(self.doors)} ({ix},{iy}) {label}")
+        self._pending_door = None
+        self._save_doors()
+
+    def _del_door(self, ix, iy):
+        for i, (door_x, door_y, _, _) in enumerate(self.doors):
+            if abs(door_x - ix) < 30 and abs(door_y - iy) < 30:
+                self.doors.pop(i)
+                print(f"[门] 删除 #{i+1} ({door_x},{door_y})")
+                self._save_doors()
+                return
+        print(f"[门] ({ix},{iy}) 附近无门")
+
     def on_mouse(self, event, sx, sy, flags, param):
         ix, iy = self.screen_to_image(sx, sy)
+
+        if self.door_mode:
+            if event == cv2.EVENT_LBUTTONDOWN:
+                self._add_door(ix, iy)
+            elif event == cv2.EVENT_RBUTTONDOWN:
+                self._del_door(ix, iy)
+            return
 
         if self.poly_mode:
             # === 描边模式 ===
@@ -205,12 +295,7 @@ class ReachabilityEditor:
                 print(f"[描边] 顶点#{len(self.poly_points)} ({ix},{iy})",
                       flush=True)
             elif event == cv2.EVENT_RBUTTONDOWN:
-                self.poly_color = 0
-                self._fill_polygon()
-            elif event == cv2.EVENT_MBUTTONDOWN:
-                # 中键=填充白色，但如果已经在拖拽就用 pan
-                self.poly_color = 255
-                self._fill_polygon()
+                self._fill_polygon()  # 用当前 poly_color 填充
             return  # 描边模式下不触发涂刷
 
         # === 涂刷模式 ===
@@ -309,16 +394,25 @@ def main():
 
         # 多边形模式
         elif key in (ord('p'), ord('P'), ord('m'), ord('M')):
+            editor.door_mode = False
             editor.poly_mode = not editor.poly_mode
             editor.poly_points = []
             m = "描边" if editor.poly_mode else "涂刷"
+            print(f"[模式] {m}")
+        elif key in (ord('d'), ord('D')):
+            editor.poly_mode = False
+            editor.door_mode = not editor.door_mode
+            m = "门标记" if editor.door_mode else "涂刷"
             print(f"[模式] {m}")
         elif editor.poly_mode and key == 27:  # Esc
             editor.poly_points = []
             print("[描边] 已取消")
         elif editor.poly_mode and key == 13:  # Enter
-            editor.poly_color = 255
             editor._fill_polygon()
+        elif editor.poly_mode and key in (ord('f'), ord('F')):
+            editor.poly_color = 0 if editor.poly_color == 255 else 255
+            label = "可达(白)" if editor.poly_color == 255 else "不可达(黑)"
+            print(f"[描边] 填充颜色切换→ {label}")
 
         elif key == ord('t') or key == ord('T'):
             editor.show_mode = (editor.show_mode + 1) % 3
@@ -347,8 +441,12 @@ def main():
         elif key == ord('j'): editor.offset_x += 30
         elif key == ord('l'): editor.offset_x -= 30
 
-        elif key == ord('1'): editor.brush_size = 4
-        elif key == ord('2'): editor.brush_size = 12
+        elif key == ord('1'):
+            if editor.door_mode: editor._set_door_dir(0)
+            else: editor.brush_size = 4
+        elif key == ord('2'):
+            if editor.door_mode: editor._set_door_dir(1)
+            else: editor.brush_size = 12
         elif key == ord('3'): editor.brush_size = 30
         elif key == ord('4'): editor.brush_size = 80
 

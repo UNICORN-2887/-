@@ -16,11 +16,19 @@ DeadMaze - 路径导航闭环
 # ============================================================
 # 阈值配置（调试时修改这里）
 # ============================================================
-WAYPOINT_REACH_THRESHOLD = 25     # 像素，到达路标的判定距离
-PATH_DEVIATION_THRESHOLD = 60    # 像素，偏离路径多久重规划
+WAYPOINT_REACH_THRESHOLD = 17     # 像素，到达路标的判定距离
+PATH_DEVIATION_THRESHOLD = 120    # 像素，偏离路径多久重规划
 MOVE_DURATION = 0.5            # 秒，每次按键时长
-TRACK_INTERVAL = 0.3             # 秒，追踪间隔（自动模式）
-LOOKAHEAD_DIST = 90           # 像素，向前看多少个像素选路标
+TRACK_INTERVAL = 0.1             # 秒，追踪间隔（自动模式）
+LOOKAHEAD_DIST =100           # 像素，向前看多少个像素选路标
+SHRINK = 80
+
+# 门附近参数 (距门 DOOR_PROXIMITY px 内自动切换)
+DOOR_PROXIMITY = 200
+DOOR_MOVE_DURATION = 0.2
+DOOR_WAYPOINT_REACH = 20
+DOOR_PATH_DEVIATION = 80
+DOOR_LOOKAHEAD = 60
 # ============================================================
 
 import os
@@ -72,6 +80,23 @@ def best_direction(dx, dy):
 # ============================================================
 # A* (同 pathfinder)
 # ============================================================
+def _remove_backtracks(path):
+    """去掉路径中的回头路 (A→B→C→B→D → A→B→D)"""
+    if len(path) < 4:
+        return path
+    # 贪心移除: 从后往前找最近的重复点
+    seen = {}
+    for i, p in enumerate(path):
+        key = (p[0], p[1])
+        if key in seen:
+            # 找到回头路，切除 seen[key]..i 这一段
+            prev = seen[key]
+            path = path[:prev] + path[i:]
+            return _remove_backtracks(path)  # 递归直到干净
+        seen[key] = i
+    return path
+
+
 def astar(grid, start, goal):
     h, w = grid.shape
     visited = np.zeros((h, w), dtype=np.uint8)
@@ -123,11 +148,27 @@ class Navigator:
         small = cv2.resize(self.reachable, (w2, h2),
                            interpolation=cv2.INTER_NEAREST)
         _, small = cv2.threshold(small, 127, 255, cv2.THRESH_BINARY)
+        # 缩边腐蚀: 3×3核多次迭代, 每次缩1格(4px)
+        if SHRINK > 0:
+            iters = int(np.ceil(SHRINK / self.DS))
+            small = cv2.erode(small, np.ones((3, 3), np.uint8), iterations=iters)
         self.grid = small
-        print(f"[网格] {w2}x{h2}")
+        pct = np.sum(self.grid > 0) / self.grid.size * 100
+        print(f"[网格] {w2}x{h2} shrink={SHRINK}px 可行走={pct:.1f}%")
 
         # 原图（显示用）
         self.map_img = cv2.imread(map_path) if os.path.exists(map_path) else None
+
+        # 加载门（仅用于近门检测）
+        import json as _json
+        door_file = reachable_path.replace('_reachable.png','_doors.json').replace('_reachable.jpg','_doors.json')
+        if not os.path.exists(door_file):
+            door_file = os.path.splitext(reachable_path)[0] + '_doors.json'
+        self.doors = []
+        if os.path.exists(door_file):
+            with open(door_file,'r') as f:
+                self.doors = _json.load(f)
+            print(f"[门] {len(self.doors)} 个门")
 
         # 后台操控
         self.ctrl = None
@@ -172,44 +213,6 @@ class Navigator:
     def to_image(self, gx, gy):
         return gx * self.DS + self.DS // 2, gy * self.DS + self.DS // 2
 
-    def snap_to_reachable(self, px, py):
-        """如果当前位置不可达，找最近的可达点"""
-        # 检查在原图可达图上是否可达
-        if (0 <= px < self.w and 0 <= py < self.h and
-                self.reachable[py, px] > 127):
-            return px, py  # 已在可达区
-
-        # 在降采样网格上做 BFS 找最近可达点
-        gx, gy = self.to_grid(px, py)
-        gh, gw = self.grid.shape
-        if not (0 <= gx < gw and 0 <= gy < gh):
-            return px, py
-
-        from collections import deque
-        visited = np.zeros((gh, gw), dtype=np.uint8)
-        q = deque([(gx, gy, 0)])
-        visited[gy, gx] = 1
-        dirs = [(0,1),(1,0),(0,-1),(-1,0),(1,1),(1,-1),(-1,1),(-1,-1)]
-
-        while q:
-            cx, cy, dist = q.popleft()
-            if self.grid[cy, cx] > 0:
-                # 找到最近可达格 → 映射回原图
-                ix, iy = self.to_image(cx, cy)
-                print(f"[吸附] ({px},{py}) → ({ix},{iy}) "
-                      f"距离≈{dist*self.DS}px")
-                return ix, iy
-            if dist > 50:  # 最多搜 50 格 (~200px)
-                break
-            for dx, dy in dirs:
-                nx, ny = cx + dx, cy + dy
-                if 0 <= nx < gw and 0 <= ny < gh and not visited[ny, nx]:
-                    visited[ny, nx] = 1
-                    q.append((nx, ny, dist + 1))
-
-        print(f"[吸附] ({px},{py}) 未找到可达点，保持原位置")
-        return px, py
-
     def scr2img(self, sx, sy):
         ix = int((sx - self.offset_x) / self.scale)
         iy = int((sy - self.offset_y) / self.scale)
@@ -220,14 +223,36 @@ class Navigator:
                 int(iy * self.scale + self.offset_y))
 
     # ----------------------------------------------------------
+    def _snap_grid(self, gx, gy):
+        """吸附到最近的可行走网格点（缩边后起点可能不可达）"""
+        if self.grid[gy, gx] > 0:
+            return gx, gy
+        gh, gw = self.grid.shape
+        from collections import deque
+        vis = np.zeros((gh, gw), np.uint8)
+        q = deque([(gx, gy, 0)])
+        vis[gy, gx] = 1
+        dirs = [(0,1),(1,0),(0,-1),(-1,0),(1,1),(1,-1),(-1,1),(-1,-1)]
+        while q:
+            cx, cy, d = q.popleft()
+            if self.grid[cy, cx] > 0:
+                return cx, cy
+            if d > 30: break
+            for dx, dy in dirs:
+                nx, ny = cx+dx, cy+dy
+                if 0<=nx<gw and 0<=ny<gh and not vis[ny,nx]:
+                    vis[ny,nx]=1; q.append((nx,ny,d+1))
+        return gx, gy  # 找不到就返回原值
+
     def plan_path(self):
         if self.start is None or self.goal is None:
             return False
-        gs = self.to_grid(*self.start)
-        gg = self.to_grid(*self.goal)
+        gs = self._snap_grid(*self.to_grid(*self.start))
+        gg = self._snap_grid(*self.to_grid(*self.goal))
         self.grid_path = astar(self.grid, gs, gg)
         if self.grid_path:
             self.path = [self.to_image(*p) for p in self.grid_path]
+            self.path = _remove_backtracks(self.path)
             print(f"[A*] {len(self.path)} waypoints")
             self.current_waypoint = 0
             self.state = self.STATE_READY
@@ -243,7 +268,7 @@ class Navigator:
         for i in range(self.current_waypoint, len(self.path)):
             wx, wy = self.path[i]
             d = np.hypot(wx - px, wy - py)
-            if d >= LOOKAHEAD_DIST and d < best_dist:
+            if d >= getattr(self,'_la',LOOKAHEAD_DIST) and d < best_dist:
                 best = i
                 best_dist = d
         if best is None and self.current_waypoint < len(self.path):
@@ -258,9 +283,22 @@ class Navigator:
             d = np.hypot(wx - px, wy - py)
             if d < min_dist:
                 min_dist = d
-        return min_dist > PATH_DEVIATION_THRESHOLD
+        return min_dist > getattr(self,'_pd',PATH_DEVIATION_THRESHOLD)
 
     # ----------------------------------------------------------
+    def _near_door(self, px, py):
+        for dx, dy, _, _ in self.doors:
+            if np.hypot(px-dx, py-dy) < DOOR_PROXIMITY:
+                return True
+        return False
+
+    def _params(self, px, py):
+        if self._near_door(px, py):
+            return (DOOR_MOVE_DURATION, DOOR_WAYPOINT_REACH,
+                    DOOR_PATH_DEVIATION, DOOR_LOOKAHEAD)
+        return (MOVE_DURATION, WAYPOINT_REACH_THRESHOLD,
+                PATH_DEVIATION_THRESHOLD, LOOKAHEAD_DIST)
+
     def navigate_step(self):
         """单步导航: 定位 → 找路标 → 移动"""
         if self.state != self.STATE_NAVIGATING:
@@ -277,20 +315,21 @@ class Navigator:
             self.position = self.tracker.last_position
         px, py = self.position if self.position else self.start
 
-        # 2. 吸附到最近可达点（战斗后可能被炸到不可达区）
-        px, py = self.snap_to_reachable(px, py)
+        # 动态参数（近门时切换）
+        md, wr, pd, la = self._params(px, py)
+        self._md, self._wr, self._pd, self._la = md, wr, pd, la
 
-        # 3. 检查是否到达终点
+        # 2. 检查是否到达终点
         gx, gy = self.goal
-        if np.hypot(px - gx, py - gy) < WAYPOINT_REACH_THRESHOLD * 3:
+        if np.hypot(px - gx, py - gy) < wr * 3:
             print("[!] 到达终点!")
             self.state = self.STATE_IDLE
             self.status_msg = "已到达终点"
             return
 
-        # 3. 检查偏离
+        # 3. 检查偏离（用动态阈值）
         if self.check_deviation(px, py):
-            print(f"[!] 偏离路径 > {PATH_DEVIATION_THRESHOLD}px，重规划")
+            print(f"[!] 偏离路径 > {pd}px，重规划")
             self.start = (px, py)
             self.plan_path()
             if self.state != self.STATE_READY:
@@ -299,7 +338,7 @@ class Navigator:
                 return
             self.state = self.STATE_NAVIGATING
 
-        # 4. 找下一个路标
+        # 4. 找下一个路标（用动态 lookahead）
         wp_idx = self.get_next_waypoint(px, py)
         if wp_idx is None:
             self.status_msg = "无路标"
@@ -307,26 +346,26 @@ class Navigator:
         self.current_waypoint = max(self.current_waypoint, wp_idx - 2)
         wx, wy = self.path[wp_idx]
 
-        # 检查是否到达路标
-        if np.hypot(px - wx, py - wy) < WAYPOINT_REACH_THRESHOLD:
+        # 检查是否到达路标（用动态阈值）
+        if np.hypot(px - wx, py - wy) < wr:
             self.current_waypoint = wp_idx + 1
             if self.current_waypoint >= len(self.path):
                 self.current_waypoint = len(self.path) - 1
 
-        # 5. 8方向拟合 + 移动
+        # 5. 8方向拟合 + 移动（用动态步长）
         dx = wx - px
         dy = wy - py
         di = best_direction(dx, dy)
-        vx, vy = DIR_VECTORS[di][0], DIR_VECTORS[di][1]
         keys = DIR_VECTORS[di][2:]
 
         if self.ctrl:
             for k in keys:
-                self.ctrl.press(getattr(self.ctrl, f'VK_{k}', ord(k)),
-                                MOVE_DURATION)
-        else:
-            # 模拟
-            pass
+                self.ctrl.key_down(
+                    getattr(self.ctrl, f'VK_{k}', ord(k)))
+            time.sleep(md)
+            for k in keys:
+                self.ctrl.key_up(
+                    getattr(self.ctrl, f'VK_{k}', ord(k)))
 
         self.status_msg = (f"→ ({wx},{wy}) dir={di} "
                            f"Δ({dx:.0f},{dy:.0f}) {keys}")
