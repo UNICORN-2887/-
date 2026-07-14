@@ -17,6 +17,7 @@ DeadMaze - 路径导航闭环
 # 阈值配置（调试时修改这里）
 # ============================================================
 WAYPOINT_REACH_THRESHOLD = 17     # 像素，到达路标的判定距离
+GOAL_REACH_THRESHOLD = 60         # 像素，到达终点的判定距离(比路标宽松)
 PATH_DEVIATION_THRESHOLD = 120    # 像素，偏离路径多久重规划
 MOVE_DURATION = 0.5            # 秒，每次按键时长
 TRACK_INTERVAL = 0.1             # 秒，追踪间隔（自动模式）
@@ -29,6 +30,7 @@ DOOR_MOVE_DURATION = 0.2
 DOOR_WAYPOINT_REACH = 20
 DOOR_PATH_DEVIATION = 80
 DOOR_LOOKAHEAD = 60
+MIN_8DIR_SEGMENT = 110  # 8方向拟合最小段长(px),短于此不拟合
 # ============================================================
 
 import os
@@ -95,6 +97,47 @@ def _remove_backtracks(path):
             return _remove_backtracks(path)  # 递归直到干净
         seen[key] = i
     return path
+
+
+def _snap_to_8dir(path, grid):
+    """将A*路径拟合为8方向线段序列, 每段纯一个方向"""
+    if len(path) < 2:
+        return path
+    h, w = grid.shape
+    result = [path[0]]
+    i = 0
+    while i < len(path) - 1:
+        best_dir = None
+        best_j = i + 1
+        # 对每个8方向找能延伸到的最远点
+        for dx, dy, *_ in DIR_VECTORS:
+            j = i + 1
+            while j < len(path):
+                ex = path[j][0] - path[i][0]
+                ey = path[j][1] - path[i][1]
+                proj = ex * dx + ey * dy
+                perp = abs(ex * dy - ey * dx)
+                if proj > 0 and perp < 40:  # 垂直偏差<40px
+                    j += 1
+                else:
+                    break
+            if j > best_j:
+                best_j = j
+                best_dir = (dx, dy)
+        # 用最佳方向延伸到最远点
+        if best_dir and best_j > i + 2:
+            ex = path[best_j - 1][0] - path[i][0]
+            ey = path[best_j - 1][1] - path[i][1]
+            proj = ex * best_dir[0] + ey * best_dir[1]
+            if proj >= MIN_8DIR_SEGMENT:
+                end_x = int(path[i][0] + best_dir[0] * proj)
+                end_y = int(path[i][1] + best_dir[1] * proj)
+                result.append((end_x, end_y))
+                i = best_j - 1
+                continue
+        result.append(path[i + 1])
+        i += 1
+    return result
 
 
 def astar(grid, start, goal):
@@ -321,7 +364,7 @@ class Navigator:
 
         # 2. 检查是否到达终点
         gx, gy = self.goal
-        if np.hypot(px - gx, py - gy) < wr * 3:
+        if np.hypot(px - gx, py - gy) < GOAL_REACH_THRESHOLD:
             print("[!] 到达终点!")
             self.state = self.STATE_IDLE
             self.status_msg = "已到达终点"
