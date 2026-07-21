@@ -1,0 +1,30 @@
+# DeadMaze YOLO 训练配置
+path: E:/Project/DeadMaze/AImaneuver
+train: images
+val: images
+
+nc: 23
+names:
+  0: Bike
+  1: Box1
+  2: Box2
+  3: Campfire
+  4: CrawerZB
+  5: DeadTree1
+  6: ExploderZB
+  7: Firefighter
+  8: GoldBag
+  9: Hydrant
+  10: PerubianZB
+  11: PitcherZB
+  12: Psign
+  13: RockA
+  14: RockB
+  15: SimpleZB
+  16: Sleepbag
+  17: SlowerZB
+  18: SprinkerZB
+  19: SummonerZB
+  20: TreeShadow1
+  21: bag
+  22: ZombieE

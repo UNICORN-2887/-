@@ -222,7 +222,16 @@ class Navigator:
             except Exception as e:
                 print(f"[!] 控制器: {e}")
 
-        # 追踪器
+        # 追踪器 (自动检测OBS摄像头)
+        import sys, os as _os
+        _am_path = _os.path.join(_os.path.dirname(__file__), 'AImaneuver')
+        if _am_path not in sys.path:
+            sys.path.insert(0, _am_path)
+        try:
+            from camera_finder import find_obs_camera
+            camera_id = find_obs_camera()
+        except Exception:
+            pass
         from map_tracker import Tracker
         self.tracker = Tracker(map_path, camera_id)
         self.position = None  # (cx, cy) 当前位置，由用户点击设定
@@ -235,10 +244,14 @@ class Navigator:
         self.state = self.STATE_IDLE
 
         self.start = None          # 起点 (原图坐标)
-        self.goal = None           # 终点
+        self.goal = None           # 当前目标
         self.path = None           # [(x,y)] 原图坐标
-        self.grid_path = None      # 网格坐标路径
         self.current_waypoint = 0
+
+        # 多路径点
+        self.waypoints = []        # [(x,y), ...] 途径点列表
+        self.wp_index = 0          # 当前前往的途径点序号
+        self.loop_mode = False     # True=循环巡逻(末尾回到起点)
 
         # 显示
         self.scale = min(1000 / self.w, 750 / self.h, 0.5)
@@ -287,16 +300,27 @@ class Navigator:
                     vis[ny,nx]=1; q.append((nx,ny,d+1))
         return gx, gy  # 找不到就返回原值
 
-    def plan_path(self):
-        if self.start is None or self.goal is None:
+    def plan_path(self, to_goal_only=False):
+        """规划到 goal(或途径点列表) 的路径"""
+        if self.start is None:
             return False
+
+        # 多途径点模式：取下一个途径点作为 goal
+        if self.waypoints and not to_goal_only:
+            self.wp_index = 0
+            self.goal = self.waypoints[0]
+        elif self.goal is None:
+            return False
+
         gs = self._snap_grid(*self.to_grid(*self.start))
         gg = self._snap_grid(*self.to_grid(*self.goal))
         self.grid_path = astar(self.grid, gs, gg)
         if self.grid_path:
             self.path = [self.to_image(*p) for p in self.grid_path]
             self.path = _remove_backtracks(self.path)
-            print(f"[A*] {len(self.path)} waypoints")
+            total = len(self.waypoints) if self.waypoints else 0
+            info = f" → WP{self.wp_index+1}/{total}" if self.waypoints else ""
+            print(f"[A*] {len(self.path)} pts{info}")
             self.current_waypoint = 0
             self.state = self.STATE_READY
             return True
@@ -365,6 +389,27 @@ class Navigator:
         # 2. 检查是否到达终点
         gx, gy = self.goal
         if np.hypot(px - gx, py - gy) < GOAL_REACH_THRESHOLD:
+            # 多途径点: 切到下一个
+            if self.waypoints and self.wp_index + 1 < len(self.waypoints):
+                self.wp_index += 1
+                self.goal = self.waypoints[self.wp_index]
+                self.start = (px, py)
+                self.plan_path(to_goal_only=True)
+                if self.state == self.STATE_READY:
+                    self.state = self.STATE_NAVIGATING
+                t = len(self.waypoints)
+                print(f"[!] WP{self.wp_index}/{t} → WP{self.wp_index+1}")
+                return
+            # 循环模式
+            if self.loop_mode and self.waypoints:
+                self.wp_index = 0
+                self.goal = self.waypoints[0]
+                self.start = (px, py)
+                self.plan_path(to_goal_only=True)
+                if self.state == self.STATE_READY:
+                    self.state = self.STATE_NAVIGATING
+                print("[!] 循环 → WP1")
+                return
             print("[!] 到达终点!")
             self.state = self.STATE_IDLE
             self.status_msg = "已到达终点"
@@ -372,14 +417,16 @@ class Navigator:
 
         # 3. 检查偏离（用动态阈值）
         if self.check_deviation(px, py):
+            self._release_keys()
             print(f"[!] 偏离路径 > {pd}px，重规划")
             self.start = (px, py)
-            self.plan_path()
+            self.plan_path(to_goal_only=True)
             if self.state != self.STATE_READY:
                 self.status_msg = "重规划失败"
                 self.state = self.STATE_IDLE
                 return
             self.state = self.STATE_NAVIGATING
+            return  # 停留，不移动，下一轮再跟踪新路径
 
         # 4. 找下一个路标（用动态 lookahead）
         wp_idx = self.get_next_waypoint(px, py)
@@ -474,6 +521,18 @@ class Navigator:
             cv2.circle(canvas, gp, 7, (0, 0, 255), -1)
             cv2.putText(canvas, "G", (gp[0]+10, gp[1]), FONT, 0.5, (0, 0, 255), 2)
 
+        # 途径点
+        for i, (wx, wy) in enumerate(self.waypoints):
+            wp = self.img2scr(wx, wy)
+            active = (i == self.wp_index and self.state == self.STATE_NAVIGATING)
+            color = (255, 255, 0) if active else (200, 200, 0)
+            cv2.circle(canvas, wp, 6, color, -1)
+            cv2.putText(canvas, str(i+1), (wp[0]+8, wp[1]+4),
+                        FONT, 0.4, color, 1)
+            if i < len(self.waypoints) - 1:
+                np_ = self.img2scr(*self.waypoints[i+1])
+                cv2.line(canvas, wp, np_, color, 1)
+
         # 实时位置
         if self.position:
             tp = self.img2scr(*self.position)
@@ -485,7 +544,7 @@ class Navigator:
         cv2.putText(canvas, f"[{state_names[self.state]}] {self.status_msg}",
                     (5, 18), FONT, 0.38, (0, 255, 0), 1)
         cv2.putText(canvas,
-                    "左键=起点 右键=终点 Enter=开始 空格=暂停 Q=退出",
+                    "左键=起点 右键=终点 Shift+右键=途径点 L=循环 空格=暂停 Q=退出",
                     (5, VH-6), FONT, 0.3, (180, 180, 180), 1)
 
         return canvas
@@ -497,11 +556,17 @@ class Navigator:
             self.status_msg = f"起点=({self.start[0]},{self.start[1]})"
             print(self.status_msg)
         elif event == cv2.EVENT_RBUTTONDOWN:
-            self.goal = self.scr2img(sx, sy)
-            self.status_msg = f"终点=({self.goal[0]},{self.goal[1]})"
-            print(self.status_msg)
-            if self.start:
-                self.plan_path()
+            pt = self.scr2img(sx, sy)
+            if flags & cv2.EVENT_FLAG_SHIFTKEY:
+                # Shift+右键: 添加途径点
+                self.waypoints.append(pt)
+                print(f"[WP] 途径点#{len(self.waypoints)} {pt}")
+            else:
+                # 右键: 设终点, 清途径点
+                self.goal = pt; self.waypoints = []; self.wp_index = 0
+                self.loop_mode = False
+                print(f"终点={pt}")
+                if self.start: self.plan_path()
         elif event == cv2.EVENT_MBUTTONDOWN:
             self._dragging = True
             self._dsx, self._dsy = sx, sy
@@ -537,7 +602,7 @@ def main():
 
     print("\n=== 路径导航闭环 ===")
     print("左键=起点 | 右键=终点(A*规划)")
-    print("Enter=开始导航 | 空格=暂停 | Esc=停止 | Q=退出\n")
+    print("Shift+右键=加途径点 | L=循环 | Enter=导航 | 空格=暂停 | Q=退出\n")
 
     cv2.namedWindow("导航", cv2.WINDOW_NORMAL)
     cv2.setWindowProperty("导航", cv2.WND_PROP_TOPMOST, 1)
@@ -555,6 +620,11 @@ def main():
         if key == ord('q') or key == ord('Q'):
             break
         elif key == 13:  # Enter
+            # 有途径点时先规划
+            if nav.waypoints and nav.state != nav.STATE_READY:
+                nav.plan_path()
+                print(f"[A*] {len(nav.waypoints)} 个途径点, "
+                      f"循环={'ON' if nav.loop_mode else 'OFF'}")
             if nav.state == nav.STATE_READY:
                 # 先测试控制器
                 if nav.ctrl:
@@ -574,6 +644,11 @@ def main():
             elif nav.state == nav.STATE_PAUSED:
                 nav.state = nav.STATE_NAVIGATING
                 print("[继续]")
+        elif key == ord('l') or key == ord('L'):
+            if nav.waypoints:
+                nav.loop_mode = not nav.loop_mode
+                m = "ON" if nav.loop_mode else "OFF"
+                print(f"[循环巡逻] {m}")
         elif key == 27:  # Esc
             nav.state = nav.STATE_IDLE
             nav.status_msg = "已停止"
