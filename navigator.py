@@ -16,12 +16,12 @@ DeadMaze - 路径导航闭环
 # ============================================================
 # 阈值配置（调试时修改这里）
 # ============================================================
-WAYPOINT_REACH_THRESHOLD = 17     # 像素，到达路标的判定距离
+WAYPOINT_REACH_THRESHOLD = 50     # 像素，到达路标的判定距离
 GOAL_REACH_THRESHOLD = 60         # 像素，到达终点的判定距离(比路标宽松)
-PATH_DEVIATION_THRESHOLD = 120    # 像素，偏离路径多久重规划
-MOVE_DURATION = 0.5            # 秒，每次按键时长
+PATH_DEVIATION_THRESHOLD = 140    # 像素，偏离路径多久重规划
+MOVE_DURATION = 0.4            # 秒，每次按键时长
 TRACK_INTERVAL = 0.1             # 秒，追踪间隔（自动模式）
-LOOKAHEAD_DIST =100           # 像素，向前看多少个像素选路标
+LOOKAHEAD_DIST =80           # 像素，向前看多少个像素选路标
 SHRINK = 80
 
 # 门附近参数 (距门 DOOR_PROXIMITY px 内自动切换)
@@ -234,6 +234,16 @@ class Navigator:
             pass
         from map_tracker import Tracker
         self.tracker = Tracker(map_path, camera_id)
+
+        # YOLO (用于火堆检测)
+        try:
+            from ultralytics import YOLO
+            yolo_path = os.path.join(os.path.dirname(__file__),
+                'AImaneuver', 'runs', 'detect', 'deadmaze_combat',
+                'weights', 'best.pt')
+            self.yolo = YOLO(yolo_path) if os.path.exists(yolo_path) else None
+        except Exception:
+            self.yolo = None
         self.position = None  # (cx, cy) 当前位置，由用户点击设定
 
         # 状态机
@@ -253,6 +263,15 @@ class Navigator:
         self.wp_index = 0          # 当前前往的途径点序号
         self.loop_mode = False     # True=循环巡逻(末尾回到起点)
 
+        # 返航
+        # 返航 (从可达图标注加载)
+        cf_file = reachable_path.replace('_reachable.png','_campfire.json')
+        self.home = None
+        if os.path.exists(cf_file):
+            with open(cf_file, 'r') as f:
+                self.home = tuple(_json.load(f))
+            print(f"[火堆] {self.home}")
+
         # 显示
         self.scale = min(1000 / self.w, 750 / self.h, 0.5)
         self.offset_x = 0
@@ -264,7 +283,7 @@ class Navigator:
     # 坐标转换
     # ----------------------------------------------------------
     def to_grid(self, ix, iy):
-        return ix // self.DS, iy // self.DS
+        return int(ix) // self.DS, int(iy) // self.DS
 
     def to_image(self, gx, gy):
         return gx * self.DS + self.DS // 2, gy * self.DS + self.DS // 2
@@ -366,6 +385,12 @@ class Navigator:
         return (MOVE_DURATION, WAYPOINT_REACH_THRESHOLD,
                 PATH_DEVIATION_THRESHOLD, LOOKAHEAD_DIST)
 
+    def _release_keys(self):
+        if not self.ctrl: return
+        for vk in [self.ctrl.VK_W, self.ctrl.VK_A, self.ctrl.VK_S, self.ctrl.VK_D]:
+            try: self.ctrl.key_up(vk)
+            except: pass
+
     def navigate_step(self):
         """单步导航: 定位 → 找路标 → 移动"""
         if self.state != self.STATE_NAVIGATING:
@@ -386,7 +411,27 @@ class Navigator:
         md, wr, pd, la = self._params(px, py)
         self._md, self._wr, self._pd, self._la = md, wr, pd, la
 
-        # 2. 检查是否到达终点
+        # 2. 到达火堆 → YOLO检测+点击
+        if self.home and np.hypot(px - self.home[0], py - self.home[1]) < GOAL_REACH_THRESHOLD:
+            if self.yolo and self.ctrl:
+                ret, yf = self.tracker.cap.read()
+                if ret:
+                    det = self.yolo(yf, verbose=False, conf=0.4)[0]
+                    for b in det.boxes:
+                        if self.yolo.names[int(b.cls[0])] == 'Campfire':
+                            x1,y1,x2,y2 = map(int, b.xyxy[0])
+                            cx,cy = (x1+x2)//2, (y1+y2)//2
+                            self._release_keys(); time.sleep(0.3)
+                            self.ctrl.click(cx, cy)
+                            print(f"[火堆] 点击 ({cx},{cy})")
+                            time.sleep(1); break
+            self._release_keys()
+            print("[返航] 到达火堆!")
+            self.state = self.STATE_IDLE
+            self.status_msg = "已返航"
+            return
+
+        # 3. 检查是否到达终点
         gx, gy = self.goal
         if np.hypot(px - gx, py - gy) < GOAL_REACH_THRESHOLD:
             # 多途径点: 切到下一个
@@ -415,18 +460,19 @@ class Navigator:
             self.status_msg = "已到达终点"
             return
 
-        # 3. 检查偏离（用动态阈值）
-        if self.check_deviation(px, py):
-            self._release_keys()
-            print(f"[!] 偏离路径 > {pd}px，重规划")
-            self.start = (px, py)
-            self.plan_path(to_goal_only=True)
-            if self.state != self.STATE_READY:
-                self.status_msg = "重规划失败"
-                self.state = self.STATE_IDLE
-                return
-            self.state = self.STATE_NAVIGATING
-            return  # 停留，不移动，下一轮再跟踪新路径
+        # 3. 检查偏离（距目标太近时不检查，避免终点前振荡）
+        if self.goal and np.hypot(px - self.goal[0], py - self.goal[1]) > GOAL_REACH_THRESHOLD * 2:
+            if self.check_deviation(px, py):
+                self._release_keys()
+                print(f"[!] 偏离路径 > {pd}px，重规划")
+                self.start = (px, py)
+                self.plan_path(to_goal_only=True)
+                if self.state != self.STATE_READY:
+                    self.status_msg = "重规划失败"
+                    self.state = self.STATE_IDLE
+                    return
+                self.state = self.STATE_NAVIGATING
+                return  # 停留
 
         # 4. 找下一个路标（用动态 lookahead）
         wp_idx = self.get_next_waypoint(px, py)
@@ -521,6 +567,13 @@ class Navigator:
             cv2.circle(canvas, gp, 7, (0, 0, 255), -1)
             cv2.putText(canvas, "G", (gp[0]+10, gp[1]), FONT, 0.5, (0, 0, 255), 2)
 
+        # 火堆 HOME
+        if self.home:
+            hp = self.img2scr(*self.home)
+            cv2.circle(canvas, hp, 8, (0, 200, 255), -1)
+            cv2.circle(canvas, hp, 11, (255, 255, 255), 2)
+            cv2.putText(canvas, "HOME", (hp[0]+10, hp[1]), FONT, 0.4, (0, 200, 255), 1)
+
         # 途径点
         for i, (wx, wy) in enumerate(self.waypoints):
             wp = self.img2scr(wx, wy)
@@ -568,6 +621,8 @@ class Navigator:
                 print(f"终点={pt}")
                 if self.start: self.plan_path()
         elif event == cv2.EVENT_MBUTTONDOWN:
+            self.home = self.scr2img(sx, sy)
+            print(f"火堆 HOME = {self.home}")
             self._dragging = True
             self._dsx, self._dsy = sx, sy
             self._dox, self._doy = self.offset_x, self.offset_y
@@ -602,7 +657,7 @@ def main():
 
     print("\n=== 路径导航闭环 ===")
     print("左键=起点 | 右键=终点(A*规划)")
-    print("Shift+右键=加途径点 | L=循环 | Enter=导航 | 空格=暂停 | Q=退出\n")
+    print("Shift+右键=途径点 | 中键=火堆 | H=返航 | L=循环 | Enter=导航 | Q=退出\n")
 
     cv2.namedWindow("导航", cv2.WINDOW_NORMAL)
     cv2.setWindowProperty("导航", cv2.WND_PROP_TOPMOST, 1)
@@ -644,6 +699,12 @@ def main():
             elif nav.state == nav.STATE_PAUSED:
                 nav.state = nav.STATE_NAVIGATING
                 print("[继续]")
+        elif key == ord('h') or key == ord('H'):
+            if nav.home:
+                nav.goal = nav.home; nav.waypoints = []; nav.loop_mode = False
+                nav.start = nav.position if nav.position else nav.start
+                nav.plan_path(to_goal_only=True)
+                print(f"[返航] → 火堆 ({nav.home[0]},{nav.home[1]})")
         elif key == ord('l') or key == ord('L'):
             if nav.waypoints:
                 nav.loop_mode = not nav.loop_mode

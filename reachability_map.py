@@ -280,6 +280,7 @@ class ReachabilityEditor:
 
     def on_mouse(self, event, sx, sy, flags, param):
         ix, iy = self.screen_to_image(sx, sy)
+        self._last_mouse = (ix, iy)  # 记录最后鼠标位置
 
         if self.door_mode:
             if event == cv2.EVENT_LBUTTONDOWN:
@@ -404,6 +405,17 @@ def main():
             editor.door_mode = not editor.door_mode
             m = "门标记" if editor.door_mode else "涂刷"
             print(f"[模式] {m}")
+        elif key in (ord('c'), ord('C')):
+            # C键: 用当前鼠标在图上标火堆
+            if hasattr(editor, '_last_mouse'):
+                ix, iy = editor._last_mouse
+                import json
+                cf = f"{editor.base}_campfire.json"
+                with open(cf, 'w') as f:
+                    json.dump([ix, iy], f)
+                print(f"[火堆] ({ix},{iy}) → {cf}")
+            else:
+                print("[火堆] 请先在地图上移动鼠标定位")
         elif editor.poly_mode and key == 27:  # Esc
             editor.poly_points = []
             print("[描边] 已取消")
