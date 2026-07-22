@@ -29,7 +29,7 @@ if os.path.exists(SAVE_FILE):
             if orig[0] == r[0]: OCR_REGIONS[i] = tuple(r); break
 
 # ========== OBS ==========
-cap = cv2.VideoCapture(OBS_CAM_ID)
+cap = cv2.VideoCapture(OBS_CAM_ID, cv2.CAP_DSHOW)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 ret, test = cap.read()

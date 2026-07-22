@@ -27,7 +27,7 @@ class Tracker:
         self.mh, self.mw = self.map_full.shape[:2]
         print(f"[地图] {self.mw}x{self.mh}")
 
-        self.cap = cv2.VideoCapture(camera_id)
+        self.cap = cv2.VideoCapture(camera_id, cv2.CAP_DSHOW)
         if not self.cap.isOpened():
             raise RuntimeError(f"摄像头 {camera_id}")
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)

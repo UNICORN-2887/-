@@ -46,7 +46,7 @@ for fn, target in [("ocr_reader_roi.json", OCR_REGIONS), ("hp_detector_roi.json"
         print(f"加载 {fn}")
 
 # ========== OBS ==========
-cap = cv2.VideoCapture(OBS_CAM_ID)
+cap = cv2.VideoCapture(OBS_CAM_ID, cv2.CAP_DSHOW)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 ret, test = cap.read()

@@ -28,7 +28,7 @@ if os.path.exists(SLOT_FILE):
 print("EasyOCR(chinese)...", end=" "); ocr_zh = easyocr.Reader(["ch_sim"], gpu=True); print("OK")
 
 # ========== OBS ==========
-cap = cv2.VideoCapture(OBS_CAM_ID)
+cap = cv2.VideoCapture(OBS_CAM_ID, cv2.CAP_DSHOW)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 ret, test = cap.read()
