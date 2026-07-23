@@ -270,6 +270,7 @@ class Navigator:
         self.zombie_counts = {}     # 僵尸种类→数量
         self.last_waypoint_time = 0 # 到达途径点的时间戳
         self.loop_patrol = False    # 循环巡逻模式
+        self._patrol_start = None   # 巡逻起点(循环时回到这里)
 
         # 中键拖拽
         self._dragging = False
@@ -295,73 +296,42 @@ class Navigator:
                 int(iy * self.scale + self.offset_y))
 
     # ----------------------------------------------------------
-    def _plan_segment(self, seg_from, seg_to):
-        """规划一段 A* 路径"""
-        gs = self.to_grid(*seg_from)
-        gg = self.to_grid(*seg_to)
+    def _do_plan(self):
+        """A*规划: 从当前位置到 self.goal"""
+        if self.start is None or self.goal is None:
+            return False
+        gs = self.to_grid(*self.start)
+        gg = self.to_grid(*self.goal)
         if self.grid[gs[1], gs[0]] == 0:
             snap = self._snap_to_reachable(gs)
-            if snap is None: return None
+            if snap is None: return False
             gs = snap
         if self.grid[gg[1], gg[0]] == 0:
             snap = self._snap_to_reachable(gg)
-            if snap is None: return None
+            if snap is None: return False
             gg = snap
         gp = astar(self.grid, gs, gg)
-        return [self.to_image(*p) for p in gp] if gp else None
+        if gp:
+            self.path = [self.to_image(*p) for p in gp]
+            self.current_waypoint = 0
+            n_wp = len(self.waypoints)
+            tag = f"WP{self.wp_index+1}/{n_wp}" if n_wp else "终点"
+            print(f"[A*] {len(self.path)}步 -> {tag}")
+            self.state = self.STATE_READY
+            return True
+        return False
 
-    def _plan_next_segment(self):
-        """规划当前段: 从当前位置到下一个目标点"""
-        if self.wp_index < len(self.waypoints):
-            target = self.waypoints[self.wp_index]
-            tag = f"WP{self.wp_index+1}"
-        else:
-            target = self.goal
-            tag = "终点"
-        cur = self.position if self.position else self.start
-        seg = self._plan_segment(cur, target)
-        if seg is None:
-            print(f"[巡逻] -> {tag} 规划失败!")
-            return False
-        self.path = seg
-        self.current_waypoint = 0
-        print(f"[巡逻] -> {tag} ({len(seg)}步)")
-        return True
-
-    def _plan_patrol(self):
-        """初始化巡逻: 验证可达, 规划第一段"""
+    def plan_path(self, to_goal_only=False):
+        """规划到 goal(或途径点列表) 的路径"""
         if self.start is None:
             return False
-        if not self.waypoints and not self.loop_patrol and self.goal is None:
+        # 多途径点: 取下一个途径点作为 goal
+        if self.waypoints and not to_goal_only:
+            self.wp_index = 0
+            self.goal = self.waypoints[0]
+        elif self.goal is None:
             return False
-        if self.loop_patrol and not self.waypoints:
-            print("[巡逻] 循环模式需要至少1个途径点")
-            return False
-        self.wp_index = 0
-        if not self._plan_next_segment():
-            return False
-        n = len(self.waypoints)
-        if n:
-            wps = " -> ".join([f"WP{i+1}" for i in range(n)])
-            if self.loop_patrol:
-                print(f"[巡逻] 循环: 起点 -> {wps} -> WP1(循环)")
-            elif self.goal:
-                print(f"[巡逻] 路线: 起点 -> {wps} -> 终点")
-            else:
-                print(f"[巡逻] 路线: 起点 -> {wps}")
-        elif self.goal:
-            print(f"[巡逻] 路线: 起点 -> 终点")
-        else:
-            print(f"[巡逻] 起点单点")
-        self.state = self.STATE_READY
-        return True
-
-    def plan_path(self):
-        """兼容旧接口"""
-        if self.goal is None:
-            return False
-        self.waypoints = []
-        return self._plan_patrol()
+        return self._do_plan()
 
     # ----------------------------------------------------------
     def get_next_waypoint(self, px, py):
@@ -818,41 +788,41 @@ class Navigator:
         self.current_waypoint = max(self.current_waypoint, wp_idx - 2)
         wx, wy = self.path[wp_idx]
 
-        # 检查是否到达当前段终点 → 等待3秒 → 切下一段
-        if wp_idx >= len(self.path) - 1 and np.hypot(px - wx, py - wy) < WAYPOINT_REACH_THRESHOLD:
-            if self.last_waypoint_time == 0:
+        # 检查是否到达当前goal (动态goal: 可能是途径点或终点)
+        gx, gy = self.goal if self.goal else (wx, wy)
+        if np.hypot(px - gx, py - gy) < GOAL_REACH_THRESHOLD:
+            # 多途径点: 切到下一个
+            if self.waypoints and self.wp_index + 1 < len(self.waypoints):
+                self.wp_index += 1
+                self.goal = self.waypoints[self.wp_index]
+                self.start = (px, py)  # 更新起点为当前位置
+                self.plan_path(to_goal_only=True)
+                if self.state == self.STATE_READY:
+                    self.state = self.STATE_NAVIGATING
+                print(f"[!] WP{self.wp_index}/{len(self.waypoints)} -> WP{self.wp_index+1}")
                 self.last_waypoint_time = time.time()
-                # 确定当前到达的是哪个目标
-                if self.wp_index < len(self.waypoints):
-                    tag = f"途径点#{self.wp_index+1}"
-                else:
-                    tag = "终点"
-                print(f"[巡逻] 到达{tag}, 等待3秒...")
-            elif time.time() - self.last_waypoint_time >= 3.0:
-                self.last_waypoint_time = 0
-                # 切到下一个目标
-                if self.wp_index < len(self.waypoints):
-                    self.wp_index += 1
-                    # 循环模式: 走完所有途径点回到WP0
-                    if self.loop_patrol and self.wp_index >= len(self.waypoints):
-                        self.wp_index = 0
-                        print("[巡逻] 循环: 回到WP1")
-                    self._plan_next_segment()
-                elif self.loop_patrol:
-                    # 循环模式 + 只有途径点
-                    self.wp_index = 0
-                    print("[巡逻] 循环: 回到WP1")
-                    self._plan_next_segment()
-                else:
-                    # 到达终点
-                    print(f"[巡逻] 到达终点!")
-                    self.state = self.STATE_IDLE
-                    self.status_msg = "巡逻完成"
-                    return
-            self.status_msg = f"等待中 ({time.time()-self.last_waypoint_time:.1f}s/3s)"
+                return
+            # 循环模式: 回到起点
+            if self.loop_patrol and self.waypoints:
+                self.wp_index = 0
+                # 循环: WPn -> 起点 -> WP1 -> ...
+                self.goal = self._patrol_start  # 先回起点
+                self.start = (px, py)
+                if np.hypot(px - self.goal[0], py - self.goal[1]) < GOAL_REACH_THRESHOLD:
+                    # 已经在起点了, 直接去WP1
+                    self.goal = self.waypoints[0]
+                self.plan_path(to_goal_only=True)
+                if self.state == self.STATE_READY:
+                    self.state = self.STATE_NAVIGATING
+                target = "起点" if self.goal == self._patrol_start else "WP1"
+                print(f"[!] 循环 -> {target}")
+                self.last_waypoint_time = time.time()
+                return
+            # 到达终点
+            print("[!] 到达终点!")
+            self.state = self.STATE_IDLE
+            self.status_msg = "巡逻完成"
             return
-        else:
-            self.last_waypoint_time = 0
 
         # 6. YOLO 僵尸检测 (每步检测一次)
         if self.yolo and self.tracker:
@@ -1114,22 +1084,25 @@ class Navigator:
         if event == cv2.EVENT_LBUTTONDOWN:
             pt = self.scr2img(sx, sy)
             if self.start is None:
-                # 第一次左键 = 起点
                 self.start = pt
+                self._patrol_start = pt  # 记录巡逻起点
                 self.status_msg = f"起点=({pt[0]},{pt[1]})"
                 print(f"[起点] {pt}")
             else:
-                # 后续左键 = 添加途径点
                 self.waypoints.append(pt)
                 i = len(self.waypoints)
                 self.status_msg = f"途径点#{i}=({pt[0]},{pt[1]})"
                 print(f"[途径点#{i}] {pt}")
         elif event == cv2.EVENT_RBUTTONDOWN:
-            self.goal = self.scr2img(sx, sy)
-            self.status_msg = f"终点=({self.goal[0]},{self.goal[1]})"
-            print(f"[终点] {self.goal}")
+            pt = self.scr2img(sx, sy)
+            self.goal = pt
+            self.waypoints = []
+            self.wp_index = 0
+            self.loop_patrol = False
+            self.status_msg = f"终点=({pt[0]},{pt[1]})"
+            print(f"[终点] {pt}")
             if self.start:
-                self._plan_patrol()  # 改为多段规划
+                self.plan_path()
         elif event == cv2.EVENT_MBUTTONDOWN:
             self._dragging = True
             self._dsx, self._dsy = sx, sy
@@ -1273,14 +1246,21 @@ def main():
                     rem = nav.skills.remaining(idx)
                     print(f"[技能] skill_{idx+1} 冷却中 ({rem:.1f}s)")
 
-        # L = 切换循环巡逻
+        # M = 切换循环巡逻
         elif key in (ord('m'), ord('M')):
-            nav.loop_patrol = not nav.loop_patrol
-            nav.goal = None  # 循环模式不需要终点
-            state = "ON" if nav.loop_patrol else "OFF"
-            print(f"[巡逻] 循环模式: {state}")
-            if nav.loop_patrol and nav.start and nav.waypoints:
-                nav._plan_patrol()
+            if not nav.waypoints:
+                print("[巡逻] 需要先添加途径点(左键)")
+            else:
+                nav.loop_patrol = not nav.loop_patrol
+                nav.goal = None
+                state = "ON" if nav.loop_patrol else "OFF"
+                print(f"[巡逻] 循环: {state}")
+                if nav.loop_patrol:
+                    nav._patrol_start = nav.start
+                    nav.plan_path()
+                    n = len(nav.waypoints)
+                    wps = " -> ".join([f"WP{i+1}" for i in range(n)])
+                    print(f"[巡逻] 循环路线: S -> {wps} -> S -> ...")
 
         # E = 切换技能开关
         elif key in (ord('e'), ord('E')):
