@@ -768,7 +768,21 @@ class Navigator:
         """YOLO检测僵尸, 返回[(cx, cy, name, dist), ...]"""
         if not self.yolo or frame is None: return
         det = self.yolo(frame, verbose=False, conf=0.3)[0]
-        self.yolo_disp = cv2.resize(det.plot(), (200, 120))
+        ydisp = det.plot()
+        # 标注当前追击目标 (黄色粗框)
+        if self.combat_target:
+            tzx, tzy, tzn, tzd = self.combat_target
+            for b in det.boxes:
+                name = self.yolo.names[int(b.cls[0])]
+                x1, y1, x2, y2 = map(int, b.xyxy[0])
+                cx = (x1 + x2) // 2; cy = (y1 + y2) // 2
+                if abs(cx - tzx) < 5 and abs(cy - tzy) < 5:
+                    cv2.rectangle(ydisp, (x1, y1), (x2, y2), (0, 255, 255), 3)
+                    short = name.replace('ZB','').replace('Zombie','Z')
+                    cv2.putText(ydisp, f"TARGET:{short}", (x1, y1 - 10),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 2)
+                    break
+        self.yolo_disp = cv2.resize(ydisp, (200, 120))
         counts = {}
         zombies = []
         fh, fw = frame.shape[:2]
@@ -1394,9 +1408,27 @@ class Navigator:
             y += 11
         y += 4
 
-        # 战斗状态
-        ctag = "巡逻中" if self.combat_state is None else f"战斗:{self.combat_state}"
-        cv2.putText(canvas, ctag, (sbx + 3, y), FONT, 0.3, (0, 255, 200), 1)
+        # 战斗状态 + 目标
+        if self.combat_state is None:
+            cv2.putText(canvas, "Patrol", (sbx + 3, y), FONT, 0.3, (0, 255, 200), 1)
+        else:
+            cv2.putText(canvas, f"COMBAT: {self.combat_state}", (sbx + 3, y),
+                       FONT, 0.3, (0, 200, 255), 1)
+            y += 14
+            if self.combat_target:
+                zx_, zy_, zn_, zd_ = self.combat_target
+                short = zn_.replace('ZB','').replace('Zombie','Z')
+                cv2.putText(canvas, f"Target: {short} {zd_}px",
+                           (sbx + 3, y), FONT, 0.28, (255, 200, 0), 1)
+                y += 14
+                # 行动方向
+                dx_ = zx_ - 960; dy_ = zy_ - 540
+                if abs(dx_) > abs(dy_):
+                    dr = "RIGHT" if dx_ > 0 else "LEFT"
+                else:
+                    dr = "DOWN" if dy_ > 0 else "UP"
+                cv2.putText(canvas, f"Dir: {dr}", (sbx + 3, y),
+                           FONT, 0.28, (200, 200, 200), 1)
         y += 14
         if self.skip_count > 0:
             cv2.putText(canvas, f"跳过: {self.skip_count}/5", (sbx + 3, y),
