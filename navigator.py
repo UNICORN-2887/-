@@ -962,7 +962,7 @@ class Navigator:
         print(f"[战斗] 空格脱战 → WP{wp_i+1} 跳过5点")
         self.last_waypoint_time = 0  # 清除等待状态
 
-    LOW_STAT_THRESHOLD = 15  # 饱食/口渴/耐力低于此值触发返航
+    LOW_STAT_THRESHOLD = 15   # 饱食/口渴/耐力低于此值触发返航 (U/J调节)
 
     def _combat_logic(self, px, py):
         """战斗状态机: 规则1补血 > 规则2脱战 > 规则3低状态返航 > 战斗/巡逻"""
@@ -1560,6 +1560,9 @@ class Navigator:
         cv2.putText(canvas, f"Sta: {self.stamina_val}", (sbx + 3, y),
                    FONT, 0.3, (200, 200, 200), 1)
         y += 14
+        cv2.putText(canvas, f"返航阈值: <{self.LOW_STAT_THRESHOLD} (U/J)", (sbx + 3, y),
+                   FONT, 0.25, (150, 150, 150), 1)
+        y += 14
         # 玩家坐标
         if self.position:
             cv2.putText(canvas, f"pos: ({self.position[0]},{self.position[1]})",
@@ -1859,6 +1862,14 @@ def main():
             nav.combat_state = None
             nav.status_msg = "已重置, 请重新设定起点/途径点/终点"
             print("[重置] 起点/途径点/终点/路径已清除")
+
+        # U/J = 调整返航阈值
+        elif key in (ord('u'), ord('U')):
+            nav.LOW_STAT_THRESHOLD = min(100, nav.LOW_STAT_THRESHOLD + 5)
+            print(f"[阈值] 返航阈值: {nav.LOW_STAT_THRESHOLD}")
+        elif key in (ord('j'), ord('J')):
+            nav.LOW_STAT_THRESHOLD = max(1, nav.LOW_STAT_THRESHOLD - 5)
+            print(f"[阈值] 返航阈值: {nav.LOW_STAT_THRESHOLD}")
 
         # Esc = 停止
         elif key == 27:
