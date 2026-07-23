@@ -1126,7 +1126,7 @@ def main():
     print("\n=== 路径导航闭环 ===")
     print("左键=起点 | 右键=终点(A*规划)")
     print("Enter=开始导航 | 空格=暂停 | Esc=停止 | Q=退出")
-    print("H=返航 | 1/2/3/4=释放技能 | E=技能开关 | IJKL=平移 | +/-=缩放\n")
+    print("H=返航 | R=重置 | 1/2/3/4=释放技能 | E=技能开关 | IJKL=平移 | +/-=缩放\n")
 
     cv2.namedWindow("Nav", cv2.WINDOW_NORMAL)
     cv2.setWindowProperty("Nav", cv2.WND_PROP_TOPMOST, 1)
@@ -1207,6 +1207,18 @@ def main():
             nav.skills.enabled = not nav.skills.enabled
             state = "ON" if nav.skills.enabled else "OFF"
             print(f"[技能] 自动释放: {state}")
+
+        # R = 重置 (清除起点/终点/路径)
+        elif key in (ord('r'), ord('R')):
+            nav.start = None
+            nav.goal = None
+            nav.path = None
+            nav.current_waypoint = 0
+            nav.last_waypoint_time = 0
+            nav.state = nav.STATE_IDLE
+            nav.returning_home = False
+            nav.status_msg = "已重置, 请重新设定起点和终点"
+            print("[重置] 起点/终点/路径已清除")
 
         # Esc = 停止
         elif key == 27:
