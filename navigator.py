@@ -1213,8 +1213,10 @@ def main():
         elif key == ord('l'):
             nav.offset_x -= 30
 
-        # Enter = 开始导航
+        # Enter = 开始导航 (如果还没规划则自动规划)
         elif key == 13:
+            if nav.state != nav.STATE_READY and nav.start and (nav.waypoints or nav.goal):
+                nav._plan_patrol()
             if nav.state == nav.STATE_READY:
                 if nav.ctrl:
                     print("[测试] 发送 W 键 0.2s...")
