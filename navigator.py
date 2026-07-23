@@ -1782,6 +1782,15 @@ def main():
                 nav.state = nav.STATE_NAVIGATING
                 nav.returning_home = False
                 print("[导航] 开始!")
+                # 预加载状态OCR (避免首次读取延迟)
+                if nav._ocr_en is None and nav.tracker and nav.tracker.cap:
+                    try:
+                        import easyocr
+                        print("[OCR] 预加载...", end=" ")
+                        nav._ocr_en = easyocr.Reader(["en"], gpu=True)
+                        print("OK")
+                    except Exception:
+                        pass
 
         # 空格 = 暂停/继续
         elif key == ord(' '):
