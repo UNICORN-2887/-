@@ -9,14 +9,18 @@ MODEL_PATH = os.path.join(BASE, "AImaneuver",
     "runs", "detect", "deadmaze_combat", "weights", "best.pt")
 OBS_CAM = 1
 
-# ---- 加载可达图 ----
-reachable_img = cv2.imread("map_output_reachable.png", cv2.IMREAD_GRAYSCALE)
-if reachable_img is None:
+# ---- 加载可达图 (DS=50 降采样, 与navigator一致) ----
+DS = 50
+raw = cv2.imread("map_output_reachable.png", cv2.IMREAD_GRAYSCALE)
+if raw is None:
     print("请先运行 reachability_map.py 生成 map_output_reachable.png")
     exit(1)
-grid = (reachable_img > 128).astype(np.uint8)
-GW, GH = grid.shape[1], grid.shape[0]
-print(f"[可达图] {GW}x{GH}")
+raw_h, raw_w = raw.shape[:2]
+gw2, gh2 = raw_w // DS, raw_h // DS
+grid = cv2.resize((raw > 128).astype(np.uint8), (gw2, gh2),
+                  interpolation=cv2.INTER_NEAREST)
+GW, GH = gw2, gh2
+print(f"[可达图] 原{raw_w}x{raw_h} → DS{DS} → {GW}x{GH}")
 
 # ---- YOLO ----
 from ultralytics import YOLO
@@ -57,8 +61,8 @@ def is_blocked(zx, zy):
     dist = math.hypot(dx, dy)
     if dist < 20: return False, 0
     base = math.atan2(dy, dx)
-    # 网格步长: 屏幕距离映射到网格距离 (约 1px ≈ 0.2格)
-    grid_dist = int(dist * 0.15)
+    # 网格步长: DS=50, 屏幕距离→网格距离 (1px ≈ 0.2格)
+    grid_dist = int(dist * 0.2)
     step = max(1, grid_dist // 30); max_steps = grid_dist
     best_ratio = 1.0
     for offset in [0, -0.26, 0.26]:
@@ -73,11 +77,6 @@ def is_blocked(zx, zy):
                     blocked += 1
         if total > 2:
             best_ratio = min(best_ratio, blocked / total)
-    # 调试: 检查射线路径
-    if dist < 100:  # 只打印近的僵尸
-        end_gx = int(player_gx + grid_dist * math.cos(base))
-        end_gy = int(player_gy + grid_dist * math.sin(base))
-        print(f"  僵尸{dist}px → 网格({end_gx},{end_gy}) ratio={best_ratio:.2f} blocked={best_ratio>0.5}")
     return best_ratio > 0.5, best_ratio
 
 while True:
