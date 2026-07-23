@@ -1125,9 +1125,14 @@ class Navigator:
             if self.stamina_val > 0 and self.stamina_val < self.LOW_STAT_THRESHOLD:
                 still_low.append(f"Stamina={self.stamina_val}")
             if still_low:
-                print(f"[停止] 补给后仍低: {', '.join(still_low)} → 停止程序")
-                self.status_msg = f"停止: 补给后仍低 {', '.join(still_low)}"
+                print(f"\n{'='*60}")
+                print(f"  !! 补给后状态仍不足, 程序终止 !!")
+                print(f"  {', '.join(still_low)}")
+                print(f"  请手动补充后重新运行")
+                print(f"{'='*60}\n")
+                self.status_msg = f"!! STOP: 补给不足 {', '.join(still_low)}"
                 self.state = self.STATE_IDLE
+                self.loop_patrol = False  # 停止循环巡逻
             elif (self.hunger_val >= 100 and self.thirst_val >= 100 and
                   self.stamina_val > 0 and self.stamina_val >= 50):
                 print(f"[补给完成] 状态恢复 → 返回巡逻起点")
