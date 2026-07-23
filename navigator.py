@@ -782,7 +782,7 @@ class Navigator:
                     cv2.putText(ydisp, f"TARGET:{short}", (x1, y1 - 10),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 2)
                     break
-        self.yolo_disp = cv2.resize(ydisp, (200, 120))
+        self.yolo_disp = cv2.resize(ydisp, (350, 220))
         counts = {}
         zombies = []
         fh, fw = frame.shape[:2]
