@@ -1853,6 +1853,10 @@ def main():
             nav.last_waypoint_time = 0
             nav.state = nav.STATE_IDLE
             nav.returning_home = False
+            nav._low_stat_triggered = False
+            nav._post_supply_check = False
+            nav.skip_count = 0
+            nav.combat_state = None
             nav.status_msg = "已重置, 请重新设定起点/途径点/终点"
             print("[重置] 起点/途径点/终点/路径已清除")
 
