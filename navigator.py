@@ -263,6 +263,9 @@ class Navigator:
         self.status_msg = "点击地图设定起点和终点"
         self.supply_info = None  # 补给状态
         self.skills = SkillCooldown()  # 技能冷却
+        self.yolo_disp = None       # YOLO检测画面 (缩小后)
+        self.zombie_counts = {}     # 僵尸种类→数量
+        self.last_waypoint_time = 0 # 到达途径点的时间戳
 
         # 中键拖拽
         self._dragging = False
@@ -781,13 +784,39 @@ class Navigator:
         self.current_waypoint = max(self.current_waypoint, wp_idx - 2)
         wx, wy = self.path[wp_idx]
 
-        # 检查是否到达路标
+        # 检查是否到达路标 → 等待3秒
         if np.hypot(px - wx, py - wy) < WAYPOINT_REACH_THRESHOLD:
-            self.current_waypoint = wp_idx + 1
-            if self.current_waypoint >= len(self.path):
-                self.current_waypoint = len(self.path) - 1
+            if self.last_waypoint_time == 0:
+                self.last_waypoint_time = time.time()
+                print(f"[巡逻] 到达途径点#{wp_idx}, 等待3秒...")
+            elif time.time() - self.last_waypoint_time >= 3.0:
+                self.current_waypoint = wp_idx + 1
+                if self.current_waypoint >= len(self.path):
+                    self.current_waypoint = len(self.path) - 1
+                self.last_waypoint_time = 0
+                print(f"[巡逻] → 下一途径点#{self.current_waypoint}")
+            # 等待期间不移动
+            self.status_msg = f"途径点#{wp_idx} 等待中 ({time.time()-self.last_waypoint_time:.1f}s/3s)"
+            return
+        else:
+            self.last_waypoint_time = 0
 
-        # 6. 8方向拟合 + 移动
+        # 6. YOLO 僵尸检测 (每步检测一次)
+        if self.yolo and self.tracker:
+            ret, yf = self.tracker.cap.read()
+            if ret:
+                det = self.yolo(yf, verbose=False, conf=0.3)[0]
+                self.yolo_disp = cv2.resize(det.plot(), (200, 120))
+                # 统计僵尸
+                counts = {}
+                for b in det.boxes:
+                    name = self.yolo.names[int(b.cls[0])]
+                    # 只统计僵尸类 (名字以ZB或Zombie结尾)
+                    if 'ZB' in name.upper() or 'ZOMBIE' in name.upper():
+                        counts[name] = counts.get(name, 0) + 1
+                self.zombie_counts = counts
+
+        # 7. 8方向拟合 + 移动
         dx = wx - px
         dy = wy - py
         di = best_direction(dx, dy)
@@ -992,6 +1021,28 @@ class Navigator:
                 txt2 = "READY" if ready else f"{rem:.1f}s"
                 cv2.putText(canvas, txt2, (bx2 + 105, by2 + 1), FONT, 0.28, col, 1)
 
+        # ---- YOLO 僵尸检测画面 ----
+        if self.yolo_disp is not None:
+            yx, yy = VW - 210, 100
+            yd_h, yd_w = self.yolo_disp.shape[:2]
+            canvas[yy:yy + yd_h, yx:yx + yd_w] = self.yolo_disp
+            cv2.rectangle(canvas, (yx, yy), (yx + yd_w, yy + yd_h), (0, 255, 0), 1)
+            cv2.putText(canvas, "YOLO", (yx, yy - 4), FONT, 0.35, (0, 255, 0), 1)
+
+            # 僵尸统计
+            zy = yy + yd_h + 5
+            cv2.putText(canvas, "僵尸:", (yx, zy), FONT, 0.3, (255, 200, 100), 1)
+            zy += 12
+            if self.zombie_counts:
+                for name_, count_ in sorted(self.zombie_counts.items()):
+                    # 简化名称
+                    short = name_.replace('ZB', '').replace('Zombie', 'Z')
+                    cv2.putText(canvas, f"  {short}: {count_}",
+                               (yx, zy), FONT, 0.28, (200, 200, 200), 1)
+                    zy += 11
+            else:
+                cv2.putText(canvas, "  (无)", (yx, zy), FONT, 0.28, (150, 150, 150), 1)
+
         help_text = "左=起点 右=终点 Enter=导航 空格=暂停 H=返航 IJKL=平移 +/-=缩放 Q=退出"
         cv2.putText(canvas, help_text,
                    (5, VH - 6), FONT, 0.3, (180, 180, 180), 1)
@@ -1047,6 +1098,30 @@ def main():
     cv2.destroyAllWindows()
 
     nav = Navigator(args.reachable, args.map, args.camera)
+
+    # ★ 技能冷却时间配置
+    cd_file = os.path.join(os.path.dirname(__file__), 'skill_cooldowns.json')
+    default_cds = [3, 5, 8, 12]
+    if os.path.exists(cd_file):
+        try:
+            saved = json.load(open(cd_file))
+            default_cds = saved.get('cooldowns', default_cds)
+            print(f"[技能] 加载冷却配置: {default_cds}")
+        except Exception:
+            pass
+    print(f"\n当前技能冷却: {default_cds}")
+    inp = input("修改冷却时间? (直接回车跳过, 或输入4个数字如 3,5,8,12): ").strip()
+    if inp:
+        try:
+            parts = [float(x.strip()) for x in inp.split(',')]
+            if len(parts) == 4:
+                default_cds = [max(0.5, p) for p in parts]
+                json.dump({'cooldowns': default_cds}, open(cd_file, 'w'))
+                print(f"[技能] 已保存: {default_cds}")
+        except Exception:
+            print("[技能] 格式错误, 使用默认值")
+    nav.skills.cooldowns = default_cds[:]
+    print(f"[技能] 冷却时间: {default_cds}\n")
 
     print("\n=== 路径导航闭环 ===")
     print("左键=起点 | 右键=终点(A*规划)")
