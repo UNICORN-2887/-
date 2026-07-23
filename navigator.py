@@ -277,6 +277,8 @@ class Navigator:
         self.skip_count = 0          # 跳过途径点计数
         self.combat_target = None    # (cx, cy, name) 当前追击僵尸
         self.last_attack_time = 0    # 上次攻击时间
+        self.chase_start_time = 0    # 当前目标开始追击时间
+        self.waypoint_combat_start = 0  # 途径点战斗开始时间
         self.zombie_list = []        # [(cx, cy, name), ...] 画面中僵尸列表
         self.hp_pct = 100            # 血量百分比
         self.hunger_val = 0          # 饱食度
@@ -738,6 +740,10 @@ class Navigator:
     ESCAPE_THRESHOLD = 20       # 脱战血量(%)
     COMBAT_ENTRY_HP = 70        # 进入战斗最低血量(%)
     COMBAT_ENTRY_MAX_ZOMBIES = 6  # 进入战斗最多僵尸数
+    CHASE_TIMEOUT = 7.0           # 追击超时(秒)
+    CHASE_ABANDON_DIST = 100      # 超时后距离>此值放弃目标
+    WAYPOINT_COMBAT_TIMEOUT = 60  # 单途径点战斗总时长(秒)
+    SCREEN_TO_GRID = 3.2          # 屏幕px→网格格比例
     ATTACK_BTN = "leave_campfire"  # 攻击按钮(别名)
 
     def _read_status_values(self, frame):
@@ -796,7 +802,7 @@ class Navigator:
         if dist < 20: return False
         gx, gy = self.to_grid(int(px), int(py))
         base_angle = math.atan2(dy, dx)
-        grid_dist = int(dist * 0.2)
+        grid_dist = int(dist * self.SCREEN_TO_GRID)
         step = max(1, grid_dist // 30); max_steps = grid_dist
         # 检查3条射线: 主方向 ±15度
         best_ratio = 1.0
@@ -825,6 +831,22 @@ class Navigator:
                 best_d = d
                 best_i = i
         return best_i
+
+    def _force_exit_combat(self, px, py):
+        """强制脱战回巡逻"""
+        self.combat_state = None
+        self.combat_target = None
+        self.chase_start_time = 0
+        self.waypoint_combat_start = 0
+        wp_i = self._find_nearest_waypoint_idx(px, py)
+        self.wp_index = wp_i
+        self.goal = self.waypoints[wp_i]
+        self.start = (px, py)
+        self.plan_path(to_goal_only=True)
+        if self.state == self.STATE_READY:
+            self.state = self.STATE_NAVIGATING
+        self.last_waypoint_time = 0
+        print(f"[战斗] 强制脱战 → WP{wp_i+1}")
 
     def _escape_to_waypoint(self, px, py):
         """脱战: 空格 → A*回最近途径点 → 跳过模式下5个点"""
@@ -870,11 +892,31 @@ class Navigator:
 
     def _combat_step(self, px, py):
         """战斗步进"""
+        now = time.time()
+
+        # ---- 途径点总超时检查 ----
+        if (self.waypoint_combat_start > 0 and
+                now - self.waypoint_combat_start > self.WAYPOINT_COMBAT_TIMEOUT):
+            print(f"[战斗] 途径点战斗超时{self.WAYPOINT_COMBAT_TIMEOUT}s, 强制脱战")
+            self._force_exit_combat(px, py)
+            return
+
         if self.combat_state == 'chasing':
             # 追最近僵尸
             if self.zombie_list:
-                self.combat_target = self.zombie_list[0]  # (cx, cy, name, dist)
+                self.combat_target = self.zombie_list[0]
                 zx, zy, zname, zdist = self.combat_target
+                # 追击超时: >7s且距离>100px → 放弃当前目标
+                if (self.chase_start_time > 0 and
+                        now - self.chase_start_time > self.CHASE_TIMEOUT and
+                        zdist > self.CHASE_ABANDON_DIST):
+                    print(f"[战斗] 追击{zname}超时{self.CHASE_TIMEOUT}s dist={zdist}, 切换目标")
+                    # 从列表中移除, 换下一个
+                    self.zombie_list = self.zombie_list[1:]
+                    self.chase_start_time = now
+                    if not self.zombie_list:
+                        self._force_exit_combat(px, py)
+                    return
                 if zdist < self.ATTACK_RANGE:
                     self.combat_state = 'attacking'
                     print(f"[战斗] 进入攻击范围 {zname} dist={zdist}")
@@ -1075,6 +1117,8 @@ class Navigator:
                             zombies_near):
                         self.combat_state = 'chasing'
                         self.combat_target = zombies_near[0]
+                        self.chase_start_time = time.time()
+                        self.waypoint_combat_start = time.time()
                         print(f"[战斗] 进入战斗! HP={self.hp_pct}% 僵尸={len(zombies_near)}只")
                         self.status_msg = f"战斗: 追击中"
                         return
