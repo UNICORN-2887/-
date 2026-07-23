@@ -780,10 +780,16 @@ class Navigator:
             self.wp_index += 1
             if self.wp_index < len(self.waypoints):
                 self.goal = self.waypoints[self.wp_index]
-            elif self.loop_patrol:
-                self.wp_index = 0
-                self.goal = self.waypoints[0]
-                print("[!] 循环 -> WP1")
+            elif self.loop_patrol and self._patrol_start:
+                # 途径点走完 → 先回起点
+                if self.goal != self._patrol_start:
+                    self.goal = self._patrol_start
+                    print("[!] -> 起点S")
+                else:
+                    # 到了起点 → 去WP1
+                    self.wp_index = 0
+                    self.goal = self.waypoints[0]
+                    print("[!] 循环 -> WP1")
             else:
                 print("[!] 到达终点!")
                 self.state = self.STATE_IDLE
@@ -852,12 +858,19 @@ class Navigator:
                         self.ctrl.key_up(vk)
                     except Exception:
                         pass
+            # 同时按下所有需要的键 (斜向)
             for k in keys:
                 try:
-                    self.ctrl.press(
-                        getattr(self.ctrl, f'VK_{k}', ord(k)),
-                        MOVE_DURATION
-                    )
+                    self.ctrl.key_down(
+                        getattr(self.ctrl, f'VK_{k}', ord(k)))
+                except Exception:
+                    pass
+            time.sleep(MOVE_DURATION)
+            # 同时释放
+            for k in keys:
+                try:
+                    self.ctrl.key_up(
+                        getattr(self.ctrl, f'VK_{k}', ord(k)))
                 except Exception:
                     pass
         else:
