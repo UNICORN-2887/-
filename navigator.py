@@ -590,7 +590,10 @@ class Navigator:
                 "items": items, "choice": choice, "round": round_num
             }
 
-            # 用户确认
+            # 用户确认 (先刷新窗口显示补给面板)
+            canvas = self.render()
+            cv2.imshow("Nav", canvas)
+            cv2.waitKey(1)
             user_input = input("[补给] 使用此食物? (y=吃 / n=跳过 / q=离开): ").strip().lower()
             if user_input == 'q':
                 print("[补给] 用户选择离开"); break
@@ -602,6 +605,9 @@ class Navigator:
                     print("[补给] 无其他可选, 离开!"); break
                 choice = choice2
                 print(f"[补给] 改用: {choice['name']} food+{choice['food']} water+{choice['water']}")
+                canvas2 = self.render()
+                cv2.imshow("Nav", canvas2)
+                cv2.waitKey(1)
                 confirm = input("[补给] 使用此食物? (y/n/q): ").strip().lower()
                 if confirm != 'y':
                     print("[补给] 用户取消, 离开!"); break
