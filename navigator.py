@@ -742,8 +742,15 @@ class Navigator:
                     self.state = self.STATE_READY
                     self.returning_home = False
             else:
-                print(f"[补给完成] 状态: H={self.hunger_val} T={self.thirst_val} S={self.stamina_val}")
-                self.status_msg = "补给完成"
+                print(f"[补给完成] 状态一般, 返回巡逻")
+                self.status_msg = "补给完成, 返回巡逻"
+                if not self.waypoints and hasattr(self, '_saved_waypoints'):
+                    self.waypoints = list(self._saved_waypoints)
+                if self._patrol_start and self.waypoints:
+                    self.goal = self.waypoints[0]; self.wp_index = 0
+                    self.plan_path()
+                    self.state = self.STATE_READY
+                    self.returning_home = False
 
     # ----------------------------------------------------------
     @staticmethod
@@ -1190,8 +1197,15 @@ class Navigator:
                         self.state = self.STATE_NAVIGATING
                     self.returning_home = False
             else:
-                print(f"[补给完成] 状态: H={self.hunger_val} T={self.thirst_val} S={self.stamina_val}")
-                self.status_msg = "补给完成"
+                print(f"[补给完成] 状态一般, 返回巡逻")
+                self.status_msg = "补给完成, 返回巡逻"
+                if not self.waypoints and hasattr(self, '_saved_waypoints'):
+                    self.waypoints = list(self._saved_waypoints)
+                if self._patrol_start and self.waypoints:
+                    self.goal = self.waypoints[0]; self.wp_index = 0
+                    self.plan_path()
+                    self.state = self.STATE_READY
+                    self.returning_home = False
 
         # ★ 战斗中: 完全跳过导航逻辑 (偏离/途径点/寻路)
         if self.combat_state is not None:
