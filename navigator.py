@@ -340,74 +340,311 @@ class Navigator:
 
     # ----------------------------------------------------------
     def _fire_camp_interact(self):
-        """到达火堆后: YOLO检测火堆 → 加偏移点击 → OCR确认"""
+        """到达火堆后: YOLO点击火堆 → OCR确认'开' → 补给决策循环"""
         if not self.yolo or not self._game_hwnd:
-            if not self.yolo:
-                self.status_msg = "返航完成 (无YOLO)"
-            else:
-                self.status_msg = "返航完成 (无游戏窗口)"
+            self.status_msg = "返航完成 (无YOLO/窗口)"
             print(f"[返航] {self.status_msg}")
             return
 
+        base_dir = os.path.dirname(__file__)
+
         # 加载偏移
-        offset_file = os.path.join(os.path.dirname(__file__),
-                                   'AImaneuver', 'click_offset.json')
+        offset_file = os.path.join(base_dir, 'AImaneuver', 'click_offset.json')
         dx, dy = 0, 0
         if os.path.exists(offset_file):
-            saved = json.load(open(offset_file))
-            dx, dy = saved.get('dx', 0), saved.get('dy', 0)
+            off = json.load(open(offset_file))
+            dx, dy = off.get('dx', 0), off.get('dy', 0)
 
         # YOLO检测火堆
         print("[返航] YOLO检测火堆...")
         best_cx, best_cy = None, None
         for _ in range(5):
             ret, frame = self.tracker.cap.read()
-            if not ret:
-                continue
+            if not ret: continue
             det = self.yolo(frame, verbose=False, conf=0.3)[0]
             for b in det.boxes:
                 if self.yolo.names[int(b.cls[0])].lower() == 'campfire':
                     x1, y1, x2, y2 = map(int, b.xyxy[0])
-                    best_cx = (x1 + x2) // 2
-                    best_cy = (y1 + y2) // 2
+                    best_cx = (x1 + x2) // 2; best_cy = (y1 + y2) // 2
                     break
-            if best_cx is not None:
-                break
+            if best_cx is not None: break
             time.sleep(0.3)
 
         if best_cx is None:
             self.status_msg = "返航完成 (YOLO未检测到火堆)"
-            print(f"[返航] {self.status_msg}")
-            return
+            print(f"[返航] {self.status_msg}"); return
 
-        # 加偏移点击
-        cx, cy = best_cx + dx, best_cy + dy
-        lp = _wa.MAKELONG(cx, cy)
+        # 多点随机点击火堆附近, 直到OCR检测到"开"
+        import random
+        opened = False
+        for i in range(8):
+            rx = best_cx + dx + random.randint(-100, 100)
+            ry = best_cy + dy + random.randint(-100, 100)
+            lp = _wa.MAKELONG(rx, ry)
+            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp)
+            time.sleep(0.05)
+            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
+            print(f"[返航] 点击#{i+1} ({rx},{ry})")
+            time.sleep(1.5)
+            if self._confirm_open():
+                opened = True; break
+            print(f"[返航] 点击#{i+1} 未检测到'开', 继续...")
+
+        if not opened:
+            self.status_msg = "返航完成 (8次点击未检测到'开')"
+            print(f"[返航] {self.status_msg}"); return
+
+        print("=" * 40 + "\n  ✅ 进入火堆, 开始补给决策\n" + "=" * 40)
+
+        # ===== 补给循环 =====
+        self._supply_loop(base_dir)
+
+    # ----------------------------------------------------------
+    def _confirm_open(self):
+        """OCR确认火堆界面'开'字 (使用标定的Open ROI)"""
+        if not HAS_TESSERACT: return True  # 无Tesseract则跳过
+        ret, f2 = self.tracker.cap.read()
+        if not ret: return False
+        # 加载标定的Open ROI (默认300,300,40,30)
+        ox, oy, ow, oh = 300, 300, 40, 30
+        roi_file = os.path.join(os.path.dirname(__file__), 'AImaneuver', 'ocr_reader_roi.json')
+        if os.path.exists(roi_file):
+            saved = json.load(open(roi_file))
+            for r in saved:
+                if r[0] == "Open":
+                    ox, oy, ow, oh = int(r[1]), int(r[2]), int(r[3]), int(r[4])
+                    break
+        roi = f2[oy:oy+oh, ox:ox+ow]
+        if roi.size == 0: return False
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        big = cv2.resize(gray, (ow*5, oh*5), interpolation=cv2.INTER_CUBIC)
+        _, th = cv2.threshold(big, 127, 255, cv2.THRESH_BINARY)
+        txt = _pt.image_to_string(th, lang='chi_sim', config='--psm 6').strip()
+        print(f"[返航] OCR ROI({ox},{oy},{ow}x{oh}) ='{txt}'")
+        return '开' in txt
+
+    # ----------------------------------------------------------
+    def _supply_loop(self, base_dir):
+        """补给决策主循环: 读状态 → 扫食物 → 决策 → 用户确认 → 吃/离开"""
+        import easyocr, re
+
+        # 加载配置
+        cp_file = os.path.join(base_dir, 'AImaneuver', 'click_points.json')
+        click_pts = json.load(open(cp_file))
+        food_roi_file = os.path.join(base_dir, 'AImaneuver', 'food_ocr_roi.json')
+        FOOD_ROI = json.load(open(food_roi_file)) if os.path.exists(food_roi_file) else [1016, 436, 298, 164]
+
+        STATUS_REGIONS = [
+            ("Hunger", 1713, 1048, 50, 25),
+            ("Thirst", 1635, 1048, 50, 25),
+        ]
+        status_roi_file = os.path.join(base_dir, 'AImaneuver', 'ocr_reader_roi.json')
+        if os.path.exists(status_roi_file):
+            saved = json.load(open(status_roi_file))
+            for r in saved:
+                for i, orig in enumerate(STATUS_REGIONS):
+                    if orig[0] == r[0]: STATUS_REGIONS[i] = tuple(r[:5]); break
+
+        # 垂直拖拽: C1从y=340下滑, C2从y=460上滑
+        FOOD_SLOTS = [
+            ("1-1", 885, 383, 340), ("1-2", 900, 383, 340),
+            ("1-3", 950, 383, 340), ("1-4", 970, 383, 340),
+            ("2-1", 885, 423, 460), ("2-2", 900, 423, 460),
+            ("2-3", 950, 423, 460), ("2-4", 970, 423, 460),
+        ]
+        LEAVE = click_pts.get("leave_campfire", {"x": 920, "y": 313})
+
+        print("[补给] EasyOCR(chinese)...", end=" ")
+        ocr_zh = easyocr.Reader(["ch_sim"], gpu=True)
+        ocr_en = easyocr.Reader(["en"], gpu=True)
+        print("OK")
+
+        obs_w, obs_h = 1920, 1080
+        for _ in range(3):
+            ret, f = self.tracker.cap.read()
+            if ret: obs_w, obs_h = f.shape[1], f.shape[0]; break
+
+        cap = self.tracker.cap  # 快捷引用
+
+        def read_hunger_thirst():
+            """读取Hunger/Thirst数值"""
+            ret, f = cap.read()
+            if not ret: return None, None
+            vals = {}
+            for name, rx, ry, rw, rh in STATUS_REGIONS:
+                roi = f[ry:ry+rh, rx:rx+rw]
+                if roi.size == 0: continue
+                gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                big = cv2.resize(gray, (rw*6, rh*6), interpolation=cv2.INTER_CUBIC)
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
+                enhanced = clahe.apply(big)
+                r = ocr_en.readtext(enhanced, detail=1, allowlist="0123456789")
+                if r:
+                    v = r[0][1].strip()
+                    if v.isdigit(): vals[name] = int(v)
+            return vals.get("Hunger"), vals.get("Thirst")
+
+        def drag_and_ocr(sx, sy, drag_start_y):
+            """垂直拖拽 + OBS drain + OCR (验证通过的方案)"""
+            # 扫描间清缓冲
+            deadline = time.time() + 0.3
+            while time.time() < deadline:
+                cap.grab(); cv2.waitKey(1)
+            cap.retrieve()
+
+            # 垂直拖拽
+            lp = _wa.MAKELONG(sx, drag_start_y)
+            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp)
+            time.sleep(0.02)
+            for step in range(1, 11):
+                cy2 = int(drag_start_y + (sy - drag_start_y) * step / 10)
+                lp2 = _wa.MAKELONG(sx, cy2)
+                _wa.SendMessage(self._game_hwnd, _wc.WM_MOUSEMOVE, 0, lp2)
+                time.sleep(0.03)
+            lp3 = _wa.MAKELONG(sx, sy)
+            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp3)
+
+            # 持续 drain + 泵消息 (关键!)
+            for _ in range(1):
+                deadline2 = time.time() + 0.8
+                while time.time() < deadline2:
+                    cap.grab(); cv2.waitKey(1)
+                cap.retrieve()
+
+            # grab 最新帧后 retrieve
+            for _ in range(10):
+                cap.grab(); cv2.waitKey(1)
+            ret, f = cap.retrieve()
+            if not ret: return None, None
+
+            # OCR
+            rx, ry, rw, rh = [max(1, int(v)) for v in FOOD_ROI]
+            rx = min(rx, obs_w-2); ry = min(ry, obs_h-2)
+            rw = min(rw, obs_w-rx); rh = min(rh, obs_h-ry)
+            roi = f[ry:ry+rh, rx:rx+rw]
+            if roi.size == 0: return None, None
+            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            big = cv2.resize(gray, (rw*3, rh*3), interpolation=cv2.INTER_CUBIC)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
+            enhanced = clahe.apply(big)
+            r = ocr_zh.readtext(enhanced, detail=1)
+            full_txt = " ".join([line[1] for line in r]) if r else ""
+
+            # OCR 模糊匹配 + 同时提取食物和水
+            fm = re.search(r'[食贪饮][物钩饭]\s*[+~-]?\s*(\d+)', full_txt)
+            wm = re.search(r'水\s*[+~-]?\s*(\d+)', full_txt)
+            food_val = int(fm.group(1)) if fm else None
+            water_val = int(wm.group(1)) if wm else None
+            return food_val, water_val
+
+        # ===== 主循环 =====
+        round_num = 0
+        while True:
+            round_num += 1
+            print(f"\n[补给] === 第{round_num}轮 ===")
+
+            # 1. 读状态
+            hunger, thirst = read_hunger_thirst()
+            if hunger is None or thirst is None:
+                print("[补给] 状态读取失败, 重试..."); time.sleep(1); continue
+            print(f"[补给] 状态: Hunger={hunger} Thirst={thirst}")
+
+            # 终止条件
+            if hunger > 100 and thirst > 100:
+                print("[补给] 饱食+口渴均>100, 离开!"); break
+
+            # 2. 扫描食物栏
+            items = []
+            for slot_name, sx_val, sy_val, drag_start_y in FOOD_SLOTS:
+                food_v, water_v = drag_and_ocr(sx_val, sy_val, drag_start_y)
+                if food_v is not None or water_v is not None:
+                    items.append({
+                        "name": slot_name, "food": food_v or 0,
+                        "water": water_v or 0,
+                        "x": sx_val, "y": sy_val, "drag_start": drag_start_y
+                    })
+                    parts = []
+                    if food_v: parts.append(f"food+{food_v}")
+                    if water_v: parts.append(f"water+{water_v}")
+                    print(f"  [{slot_name}] {' | '.join(parts)}")
+                else:
+                    print(f"  [{slot_name}] 空")
+
+            # 3. 决策
+            action, choice = self._decide(hunger, thirst, items)
+            if action == "leave" or choice is None:
+                print("[补给] 无可吃食物, 离开!"); break
+
+            print(f"\n[补给] 推荐: {choice['name']} food+{choice['food']} water+{choice['water']}")
+            print(f"[补给] 当前 Hunger={hunger} Thirst={thirst}")
+
+            # 4. 用户确认
+            user_input = input("[补给] 使用此食物? (y=吃 / n=跳过选下一个 / q=离开): ").strip().lower()
+            if user_input == 'q':
+                print("[补给] 用户选择离开"); break
+            elif user_input == 'n':
+                # 从列表中移除已选的, 重新决策
+                items = [it for it in items if it["name"] != choice["name"]]
+                print(f"[补给] 跳过 {choice['name']}, 重新决策...")
+                action2, choice2 = self._decide(hunger, thirst, items)
+                if action2 == "leave" or choice2 is None:
+                    print("[补给] 无其他可选, 离开!"); break
+                choice = choice2
+                print(f"[补给] 改用: {choice['name']} food+{choice['food']} water+{choice['water']}")
+                confirm = input("[补给] 使用此食物? (y/n/q): ").strip().lower()
+                if confirm != 'y':
+                    print("[补给] 用户取消, 离开!"); break
+
+            # 5. 食用
+            print(f"[补给] 食用 {choice['name']}...")
+            cx2, cy2 = choice["x"], choice["y"]
+            lp = _wa.MAKELONG(cx2, cy2)
+            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp)
+            time.sleep(0.05)
+            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
+            print(f"[补给] 已点击 ({cx2},{cy2}), 等待8秒...")
+            time.sleep(8.0)
+
+        # 6. 离开
+        lx, ly = LEAVE["x"], LEAVE["y"]
+        lp = _wa.MAKELONG(lx, ly)
         _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp)
         time.sleep(0.05)
         _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
-        print(f"[返航] 点击 ({cx},{cy}) 偏移=({dx},{dy})")
-        time.sleep(2.0)
+        self.status_msg = "补给完成, 已离开火堆"
+        print(f"[补给] 点击离开 ({lx},{ly})")
+        print("=" * 40 + "\n  ✅ 补给完成!\n" + "=" * 40)
 
-        # OCR检测"开"
-        self.status_msg = "返航完成"
-        if HAS_TESSERACT:
-            ret, f2 = self.tracker.cap.read()
-            if ret:
-                roi = f2[300:330, 300:340]
-                if roi.size > 0:
-                    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-                    big = cv2.resize(gray, (160, 120), interpolation=cv2.INTER_CUBIC)
-                    _, th = cv2.threshold(big, 127, 255, cv2.THRESH_BINARY)
-                    txt = _pt.image_to_string(th, lang='chi_sim',
-                                              config='--psm 6').strip()
-                    print(f"[返航] OCR='{txt}'")
-                    if '开' in txt:
-                        self.status_msg = "返航成功!"
-                        print("=" * 40 + "\n  ✅ 返航成功!\n" + "=" * 40)
-                    else:
-                        self.status_msg = f"返航完成 (OCR='{txt}')"
-        print(f"[返航] {self.status_msg}")
+    # ----------------------------------------------------------
+    @staticmethod
+    def _decide(hunger, thirst, items):
+        """补给决策引擎: 返回 ('eat', item) 或 ('leave', None)"""
+        if not items:
+            return ("leave", None)
+
+        rule1 = []  # 双不超130
+        rule2 = []  # 至少一项超130
+
+        for item in items:
+            f = item.get("food", 0) or 0
+            w = item.get("water", 0) or 0
+            if f == 0 and w == 0: continue
+            over_h = max(0, hunger + f - 130)
+            over_t = max(0, thirst + w - 130)
+            total_over = over_h + over_t
+            total_benefit = f + w
+            if total_over == 0:
+                rule1.append((total_benefit, item))
+            else:
+                rule2.append((total_over, -total_benefit, item))
+
+        if rule1:
+            rule1.sort(key=lambda x: -x[0])
+            return ("eat", rule1[0][1])
+        if rule2:
+            rule2.sort(key=lambda x: (x[0], x[1]))
+            return ("eat", rule2[0][2])
+        return ("leave", None)
 
     # ----------------------------------------------------------
     def navigate_step(self):
@@ -426,12 +663,14 @@ class Navigator:
         px, py = self.position if self.position else self.start
         px, py = int(px), int(py)
 
-        # 2. 检查是否到达火堆 (离火堆近就自动交互)
+        # 2. 检查是否到达火堆 (离火堆近就自动交互, 用更大阈值)
+        HOME_REACH = int(GOAL_REACH_THRESHOLD * 1.5)
         if self.home:
             hx, hy = self.home
-            if np.hypot(px - hx, py - hy) < GOAL_REACH_THRESHOLD:
+            d_home = np.hypot(px - hx, py - hy)
+            if d_home < HOME_REACH:
                 tag = "返航" if self.returning_home else "到达火堆"
-                print(f"[{tag}] 到达火堆附近!")
+                print(f"\n{'='*40}\n[{tag}] 距火堆{d_home:.0f}px < {HOME_REACH}px, 触发火堆交互\n{'='*40}")
                 self.state = self.STATE_IDLE
                 self.returning_home = False
                 self._fire_camp_interact()
@@ -439,8 +678,16 @@ class Navigator:
 
         # 3. 检查是否到达终点
         gx, gy = self.goal
-        if np.hypot(px - gx, py - gy) < GOAL_REACH_THRESHOLD:
-            print("[!] 到达终点!")
+        d_goal = np.hypot(px - gx, py - gy)
+        if d_goal < GOAL_REACH_THRESHOLD:
+            # 终点离火堆近? 也触发火堆交互
+            if self.home and np.hypot(gx - self.home[0], gy - self.home[1]) < HOME_REACH:
+                print(f"\n{'='*40}\n[到达终点] 终点距火堆近, 触发火堆交互\n{'='*40}")
+                self.state = self.STATE_IDLE
+                self.returning_home = False
+                self._fire_camp_interact()
+                return
+            print(f"[!] 到达终点! (距目标{d_goal:.0f}px)")
             self.state = self.STATE_IDLE
             self.status_msg = "已到达终点"
             self.returning_home = False
