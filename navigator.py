@@ -1504,7 +1504,7 @@ class Navigator:
             cv2.rectangle(canvas, (bx, by_), (bx + bw, by_ + bh), (0, 200, 0), 1)
 
             y = by_ + 16
-            cv2.putText(canvas, f"补给 第{si['round']}轮", (bx + 5, y), FONT, 0.45, (0, 255, 0), 1)
+            cv2.putText(canvas, f"Supply R{si['round']}轮", (bx + 5, y), FONT, 0.45, (0, 255, 0), 1)
             y += 20
             cv2.putText(canvas, f"初始: H={si['init_hunger']} T={si['init_thirst']}",
                        (bx + 5, y), FONT, 0.35, (200, 200, 200), 1)
@@ -1524,7 +1524,7 @@ class Navigator:
                 y += 18
 
             # 扫描到的物品
-            cv2.putText(canvas, "物品:", (bx + 5, y), FONT, 0.35, (180, 180, 180), 1)
+            cv2.putText(canvas, "Items:", (bx + 5, y), FONT, 0.35, (180, 180, 180), 1)
             y += 14
             for it in si.get('items', [])[:8]:
                 cv2.putText(canvas,
@@ -1543,7 +1543,7 @@ class Navigator:
         cv2.rectangle(canvas, (sbx, sby), (sbx + sbw, VH - 5), (100, 100, 100), 1)
 
         y = sby + 15
-        cv2.putText(canvas, "状态", (sbx + 3, y), FONT, 0.4, (0, 255, 0), 1)
+        cv2.putText(canvas, "Status", (sbx + 3, y), FONT, 0.4, (0, 255, 0), 1)
         y += 18
 
         # HP 血条
@@ -1560,7 +1560,7 @@ class Navigator:
         cv2.putText(canvas, f"Sta: {self.stamina_val}", (sbx + 3, y),
                    FONT, 0.3, (200, 200, 200), 1)
         y += 14
-        cv2.putText(canvas, f"返航阈值: <{self.LOW_STAT_THRESHOLD} (U/J)", (sbx + 3, y),
+        cv2.putText(canvas, f"Return threshold: <{self.LOW_STAT_THRESHOLD} (U/J)", (sbx + 3, y),
                    FONT, 0.25, (150, 150, 150), 1)
         y += 14
         # 玩家坐标
@@ -1570,7 +1570,7 @@ class Navigator:
         y += 18
 
         # 技能
-        cv2.putText(canvas, "技能", (sbx + 3, y), FONT, 0.35, (0, 255, 255), 1)
+        cv2.putText(canvas, "Skills", (sbx + 3, y), FONT, 0.35, (0, 255, 255), 1)
         y += 14
         for i in range(4):
             cd = self.skills.cooldowns[i]
@@ -1630,7 +1630,7 @@ class Navigator:
             y += yd_h + 4
 
         # 僵尸统计
-        cv2.putText(canvas, "僵尸:", (sbx + 3, y), FONT, 0.28, (255, 200, 100), 1)
+        cv2.putText(canvas, "Zombies:", (sbx + 3, y), FONT, 0.28, (255, 200, 100), 1)
         y += 12
         if self.zombie_counts:
             for name_, count_ in sorted(self.zombie_counts.items()):
@@ -1639,7 +1639,7 @@ class Navigator:
                            FONT, 0.26, (200, 200, 200), 1)
                 y += 10
         else:
-            cv2.putText(canvas, "  (无)", (sbx + 3, y), FONT, 0.26, (150, 150, 150), 1)
+            cv2.putText(canvas, "  (none)", (sbx + 3, y), FONT, 0.26, (150, 150, 150), 1)
 
         help_text = "左=起点/WP 右=终点 M=循环 R=重置 Enter=导航 空格=暂停 H=返航 Q=退出"
         cv2.putText(canvas, help_text,
@@ -1860,16 +1860,16 @@ def main():
             nav._post_supply_check = False
             nav.skip_count = 0
             nav.combat_state = None
-            nav.status_msg = "已重置, 请重新设定起点/途径点/终点"
-            print("[重置] 起点/途径点/终点/路径已清除")
+            nav.status_msg = "Reset, 请重新设定起点/途径点/终点"
+            print("[重置] 起点/waypoints/goal/path cleared")
 
-        # U/J = 调整返航阈值
+        # U/J = 调整Return threshold
         elif key in (ord('u'), ord('U')):
             nav.LOW_STAT_THRESHOLD = min(100, nav.LOW_STAT_THRESHOLD + 5)
-            print(f"[阈值] 返航阈值: {nav.LOW_STAT_THRESHOLD}")
+            print(f"[阈值] Return threshold: {nav.LOW_STAT_THRESHOLD}")
         elif key in (ord('j'), ord('J')):
             nav.LOW_STAT_THRESHOLD = max(1, nav.LOW_STAT_THRESHOLD - 5)
-            print(f"[阈值] 返航阈值: {nav.LOW_STAT_THRESHOLD}")
+            print(f"[阈值] Return threshold: {nav.LOW_STAT_THRESHOLD}")
 
         # Esc = 停止
         elif key == 27:
