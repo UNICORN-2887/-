@@ -1173,11 +1173,7 @@ class Navigator:
         else:
             pass  # 模拟模式
 
-        # 7. 技能自动释放 (冷却好了就放)
-        if self.ctrl and self.skills.enabled:
-            for idx in self.skills.all_ready():
-                self.skills.use(idx, self.ctrl)
-                break  # 每步最多放一个技能
+        # 7. 技能: 战斗中才放1/3/4, 2由补血规则单独控制
 
         self.status_msg = (f"→ ({wx},{wy}) dir={di} "
                           f"Δ({dx:.0f},{dy:.0f}) {keys}")
