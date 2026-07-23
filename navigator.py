@@ -770,55 +770,53 @@ class Navigator:
         self.current_waypoint = max(self.current_waypoint, wp_idx - 2)
         wx, wy = self.path[wp_idx]
 
-        # 检查是否到达当前goal (动态goal: 途径点/循环起点/终点)
-        gx, gy = self.goal if self.goal else (wx, wy)
-        d_goal = np.hypot(px - gx, py - gy)
-        if d_goal < GOAL_REACH_THRESHOLD:
-            # 多途径点: 等待3秒 → 切到下一个
-            if self.waypoints and self.wp_index + 1 < len(self.waypoints):
-                tag = f"途径点#{self.wp_index+1}"
-                if self.last_waypoint_time == 0:
-                    self.last_waypoint_time = time.time()
-                    print(f"[巡逻] 到达{tag}, 等待3秒...")
-                    self.status_msg = f"{tag} 等待中"
-                elif time.time() - self.last_waypoint_time >= 3.0:
-                    self.last_waypoint_time = 0
-                    self.wp_index += 1
-                    self.goal = self.waypoints[self.wp_index]
-                    self.start = (px, py)
-                    self.plan_path(to_goal_only=True)
-                    if self.state == self.STATE_READY:
-                        self.state = self.STATE_NAVIGATING
-                    print(f"[!] WP{self.wp_index}/{len(self.waypoints)} -> WP{self.wp_index+1}")
-                return
-            # 循环模式: 等待3秒 → 回起点 → WP1
-            if self.loop_patrol and self.waypoints:
-                if self.last_waypoint_time == 0:
-                    self.last_waypoint_time = time.time()
-                    target = "起点" if self.goal != self._patrol_start else "WP1"
-                    print(f"[巡逻] 循环到达, 等待3秒 -> {target}")
-                    self.status_msg = f"循环等待中"
-                elif time.time() - self.last_waypoint_time >= 3.0:
-                    self.last_waypoint_time = 0
-                    self.wp_index = 0
-                    if self.goal == self._patrol_start:
-                        self.goal = self.waypoints[0]
-                    else:
-                        self.goal = self._patrol_start
-                    self.start = (px, py)
-                    self.plan_path(to_goal_only=True)
-                    if self.state == self.STATE_READY:
-                        self.state = self.STATE_NAVIGATING
-                    t = "WP1" if self.goal == self.waypoints[0] else "起点"
-                    print(f"[!] 循环 -> {t}")
-                return
-            # 到达终点
-            print(f"[!] 到达终点! (距目标{d_goal:.0f}px)")
-            self.state = self.STATE_IDLE
-            self.status_msg = "巡逻完成"
-            return
-        else:
+        # 0. 途径点等待中? 停止一切移动, 倒计时
+        if self.last_waypoint_time > 0:
+            if time.time() - self.last_waypoint_time < 3.0:
+                self.status_msg = f"途径点等待 {time.time()-self.last_waypoint_time:.1f}s/3s"
+                return  # 不移动
+            # 时间到, 切下一段
             self.last_waypoint_time = 0
+            self.wp_index += 1
+            if self.wp_index < len(self.waypoints):
+                self.goal = self.waypoints[self.wp_index]
+            elif self.loop_patrol:
+                self.wp_index = 0
+                self.goal = self.waypoints[0]
+                print("[!] 循环 -> WP1")
+            else:
+                print("[!] 到达终点!")
+                self.state = self.STATE_IDLE
+                self.status_msg = "巡逻完成"
+                return
+            self.start = (px, py)
+            self.plan_path(to_goal_only=True)
+            if self.state == self.STATE_READY:
+                self.state = self.STATE_NAVIGATING
+            print(f"[!] -> WP{self.wp_index+1}/{len(self.waypoints)}")
+            return
+
+        # 检查是否到达当前goal
+        if self.goal:
+            gx, gy = self.goal
+            d_goal = np.hypot(px - gx, py - gy)
+            if d_goal < GOAL_REACH_THRESHOLD:
+                # 还有下一途径点或循环?
+                has_next = (self.waypoints and
+                           (self.wp_index + 1 < len(self.waypoints) or self.loop_patrol))
+                if has_next:
+                    self.last_waypoint_time = time.time()
+                    tag = f"途径点#{self.wp_index+1}"
+                    print(f"[巡逻] 到达{tag}, 等待3秒...")
+                    self.status_msg = f"{tag} 等待 0s/3s"
+                    return
+                # 到达终点
+                print(f"[!] 到达终点! (距目标{d_goal:.0f}px)")
+                self.state = self.STATE_IDLE
+                self.status_msg = "巡逻完成"
+                return
+
+        # 4. 检查偏离
 
         # 6. YOLO 僵尸检测 (每步检测一次)
         if self.yolo and self.tracker:
