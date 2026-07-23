@@ -1103,7 +1103,7 @@ class Navigator:
             else:
                 cv2.putText(canvas, "  (无)", (yx, zy), FONT, 0.28, (150, 150, 150), 1)
 
-        help_text = "左=起点 右=终点 Enter=导航 空格=暂停 H=返航 IJKL=平移 +/-=缩放 Q=退出"
+        help_text = "左=起点/WP 右=终点 M=循环 R=重置 Enter=导航 空格=暂停 H=返航 Q=退出"
         cv2.putText(canvas, help_text,
                    (5, VH - 6), FONT, 0.3, (180, 180, 180), 1)
 
@@ -1195,7 +1195,7 @@ def main():
     print("\n=== 路径导航闭环 ===")
     print("左键=起点 | 右键=终点(A*规划)")
     print("Enter=开始导航 | 空格=暂停 | Esc=停止 | Q=退出")
-    print("H=返航 | L=循环巡逻 | R=重置 | 1-4=技能 | E=技能开关 | IJKL=平移 | +/-=缩放\n")
+    print("H=返航 | M=循环巡逻 | R=重置 | 1-4=技能 | E=技能开关 | IJKL=平移 | +/-=缩放\n")
 
     cv2.namedWindow("Nav", cv2.WINDOW_NORMAL)
     cv2.setWindowProperty("Nav", cv2.WND_PROP_TOPMOST, 1)
@@ -1274,7 +1274,7 @@ def main():
                     print(f"[技能] skill_{idx+1} 冷却中 ({rem:.1f}s)")
 
         # L = 切换循环巡逻
-        elif key in (ord('l'), ord('L')):
+        elif key in (ord('m'), ord('M')):
             nav.loop_patrol = not nav.loop_patrol
             nav.goal = None  # 循环模式不需要终点
             state = "ON" if nav.loop_patrol else "OFF"
