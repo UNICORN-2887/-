@@ -766,7 +766,7 @@ class Navigator:
         counts = {}
         zombies = []
         fh, fw = frame.shape[:2]
-        player_cx, player_cy = fw // 2, fh  # 玩家在画面底部中央
+        player_cx, player_cy = fw // 2, fh // 2  # 玩家在画面中心
         for b in det.boxes:
             name = self.yolo.names[int(b.cls[0])]
             if 'ZB' in name.upper() or 'ZOMBIE' in name.upper():

@@ -92,7 +92,7 @@ while True:
                 x1, y1, x2, y2 = map(int, b.xyxy[0])
                 cx = (x1 + x2) // 2
                 cy = (y1 + y2) // 2
-                dist = int(np.hypot(cx - 960, cy - 1080))
+                dist = int(np.hypot(cx - 960, cy - 540))
                 zombies.append((name, dist, (x1, y1, x2, y2)))
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
                 cv2.putText(frame, f"{name[-6:]} {dist}px", (x1, y1 - 5),
