@@ -224,6 +224,7 @@ class Navigator:
         self.offset_x = 0
         self.offset_y = 0
         self.status_msg = "点击地图设定起点和终点"
+        self.supply_info = None  # 补给状态 {hunger, thirst, items, decision, round}
 
         # 中键拖拽
         self._dragging = False
@@ -342,7 +343,7 @@ class Navigator:
     def _fire_camp_interact(self):
         """到达火堆后: YOLO点击火堆 → OCR确认'开' → 补给决策循环"""
         if not self.yolo or not self._game_hwnd:
-            self.status_msg = "返航完成 (无YOLO/窗口)"
+            self.status_msg = "返航完成 (无YOLO/窗口)"; self.supply_info = None
             print(f"[返航] {self.status_msg}")
             return
 
@@ -371,7 +372,7 @@ class Navigator:
             time.sleep(0.3)
 
         if best_cx is None:
-            self.status_msg = "返航完成 (YOLO未检测到火堆)"
+            self.status_msg = "返航完成 (YOLO未检测到火堆)"; self.supply_info = None
             print(f"[返航] {self.status_msg}"); return
 
         # 多点随机点击火堆附近, 直到OCR检测到"开"
@@ -391,7 +392,7 @@ class Navigator:
             print(f"[返航] 点击#{i+1} 未检测到'开', 继续...")
 
         if not opened:
-            self.status_msg = "返航完成 (8次点击未检测到'开')"
+            self.status_msg = "返航完成 (8次点击未检测到'开')"; self.supply_info = None
             print(f"[返航] {self.status_msg}"); return
 
         print("=" * 40 + "\n  ✅ 进入火堆, 开始补给决策\n" + "=" * 40)
@@ -537,23 +538,25 @@ class Navigator:
             water_val = int(wm.group(1)) if wm else None
             return food_val, water_val
 
+        # ===== 虚拟状态追踪 (进入火堆时OCR一次, 后续累加) =====
+        init_hunger, init_thirst = read_hunger_thirst()
+        virt_hunger = init_hunger or 0
+        virt_thirst = init_thirst or 0
+        consumed_food_total = 0
+        consumed_water_total = 0
+        print(f"[补给] 初始状态: Hunger={virt_hunger} Thirst={virt_thirst}")
+
         # ===== 主循环 =====
         round_num = 0
         while True:
             round_num += 1
             print(f"\n[补给] === 第{round_num}轮 ===")
 
-            # 1. 读状态
-            hunger, thirst = read_hunger_thirst()
-            if hunger is None or thirst is None:
-                print("[补给] 状态读取失败, 重试..."); time.sleep(1); continue
-            print(f"[补给] 状态: Hunger={hunger} Thirst={thirst}")
+            # 终止条件 (用虚拟值)
+            if virt_hunger > 100 and virt_thirst > 100:
+                print(f"[补给] 虚拟饱食+口渴均>100 (H={virt_hunger} T={virt_thirst}), 离开!"); break
 
-            # 终止条件
-            if hunger > 100 and thirst > 100:
-                print("[补给] 饱食+口渴均>100, 离开!"); break
-
-            # 2. 扫描食物栏
+            # 扫描食物栏
             items = []
             for slot_name, sx_val, sy_val, drag_start_y in FOOD_SLOTS:
                 food_v, water_v = drag_and_ocr(sx_val, sy_val, drag_start_y)
@@ -570,23 +573,31 @@ class Navigator:
                 else:
                     print(f"  [{slot_name}] 空")
 
-            # 3. 决策
-            action, choice = self._decide(hunger, thirst, items)
+            # 决策 (用虚拟值)
+            action, choice = self._decide(virt_hunger, virt_thirst, items)
             if action == "leave" or choice is None:
-                print("[补给] 无可吃食物, 离开!"); break
+                print(f"[补给] 无可吃食物 (虚拟 H={virt_hunger} T={virt_thirst}), 离开!"); break
 
             print(f"\n[补给] 推荐: {choice['name']} food+{choice['food']} water+{choice['water']}")
-            print(f"[补给] 当前 Hunger={hunger} Thirst={thirst}")
+            print(f"[补给] 虚拟饱食={virt_hunger}→{virt_hunger+choice['food']} 口渴={virt_thirst}→{virt_thirst+choice['water']}")
+            print(f"[补给] 已消耗总计: food+{consumed_food_total} water+{consumed_water_total}")
 
-            # 4. 用户确认
-            user_input = input("[补给] 使用此食物? (y=吃 / n=跳过选下一个 / q=离开): ").strip().lower()
+            # 更新补给面板显示
+            self.supply_info = {
+                "init_hunger": init_hunger, "init_thirst": init_thirst,
+                "virt_hunger": virt_hunger, "virt_thirst": virt_thirst,
+                "consumed_food": consumed_food_total, "consumed_water": consumed_water_total,
+                "items": items, "choice": choice, "round": round_num
+            }
+
+            # 用户确认
+            user_input = input("[补给] 使用此食物? (y=吃 / n=跳过 / q=离开): ").strip().lower()
             if user_input == 'q':
                 print("[补给] 用户选择离开"); break
             elif user_input == 'n':
-                # 从列表中移除已选的, 重新决策
                 items = [it for it in items if it["name"] != choice["name"]]
                 print(f"[补给] 跳过 {choice['name']}, 重新决策...")
-                action2, choice2 = self._decide(hunger, thirst, items)
+                action2, choice2 = self._decide(virt_hunger, virt_thirst, items)
                 if action2 == "leave" or choice2 is None:
                     print("[补给] 无其他可选, 离开!"); break
                 choice = choice2
@@ -595,7 +606,7 @@ class Navigator:
                 if confirm != 'y':
                     print("[补给] 用户取消, 离开!"); break
 
-            # 5. 食用
+            # 食用
             print(f"[补给] 食用 {choice['name']}...")
             cx2, cy2 = choice["x"], choice["y"]
             lp = _wa.MAKELONG(cx2, cy2)
@@ -603,6 +614,12 @@ class Navigator:
             time.sleep(0.05)
             _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
             print(f"[补给] 已点击 ({cx2},{cy2}), 等待8秒...")
+
+            # 更新虚拟值
+            virt_hunger += choice['food']
+            virt_thirst += choice['water']
+            consumed_food_total += choice['food']
+            consumed_water_total += choice['water']
             time.sleep(8.0)
 
         # 6. 离开
@@ -612,6 +629,7 @@ class Navigator:
         time.sleep(0.05)
         _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
         self.status_msg = "补给完成, 已离开火堆"
+        self.supply_info = None  # 清除补给面板
         print(f"[补给] 点击离开 ({lx},{ly})")
         print("=" * 40 + "\n  ✅ 补给完成!\n" + "=" * 40)
 
@@ -859,6 +877,47 @@ class Navigator:
         state_names = ["空闲", "就绪(按Enter开始)", "导航中", "已暂停"]
         cv2.putText(canvas, f"[{state_names[self.state]}] {self.status_msg}",
                    (5, 18), FONT, 0.38, (0, 255, 0), 1)
+
+        # ---- 补给面板 (火堆补给时显示) ----
+        if self.supply_info:
+            si = self.supply_info
+            # 半透明背景
+            bx, by_ = 5, 28
+            bw, bh = 280, 220
+            overlay = canvas.copy()
+            cv2.rectangle(overlay, (bx, by_), (bx + bw, by_ + bh), (30, 30, 30), -1)
+            canvas = cv2.addWeighted(canvas, 0.7, overlay, 0.3, 0)
+            cv2.rectangle(canvas, (bx, by_), (bx + bw, by_ + bh), (0, 200, 0), 1)
+
+            y = by_ + 16
+            cv2.putText(canvas, f"补给 第{si['round']}轮", (bx + 5, y), FONT, 0.45, (0, 255, 0), 1)
+            y += 20
+            cv2.putText(canvas, f"初始: H={si['init_hunger']} T={si['init_thirst']}",
+                       (bx + 5, y), FONT, 0.35, (200, 200, 200), 1)
+            y += 16
+            cv2.putText(canvas, f"虚拟: H={si['virt_hunger']} T={si['virt_thirst']}",
+                       (bx + 5, y), FONT, 0.4, (0, 255, 255), 1)
+            y += 16
+            cv2.putText(canvas, f"已吃: food+{si['consumed_food']} water+{si['consumed_water']}",
+                       (bx + 5, y), FONT, 0.35, (255, 200, 100), 1)
+            y += 20
+
+            # 推荐
+            ch = si.get('choice')
+            if ch:
+                cv2.putText(canvas, f"推荐: {ch['name']} f+{ch['food']} w+{ch['water']}",
+                           (bx + 5, y), FONT, 0.38, (0, 255, 100), 1)
+                y += 18
+
+            # 扫描到的物品
+            cv2.putText(canvas, "物品:", (bx + 5, y), FONT, 0.35, (180, 180, 180), 1)
+            y += 14
+            for it in si.get('items', [])[:8]:
+                cv2.putText(canvas,
+                           f"  {it['name']}: f+{it['food']} w+{it['water']}",
+                           (bx + 5, y), FONT, 0.3,
+                           (0, 255, 0) if ch and it['name'] == ch['name'] else (150, 150, 150), 1)
+                y += 12
 
         help_text = "左=起点 右=终点 Enter=导航 空格=暂停 H=返航 IJKL=平移 +/-=缩放 Q=退出"
         cv2.putText(canvas, help_text,
