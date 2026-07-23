@@ -1,6 +1,6 @@
 """
 墙检测测试 — YOLO画面中标注僵尸是否被墙阻挡
-绿框=可攻击  红框=墙后(不可攻击)
+绿框=OK  红框=BLOCKED(不OK)
 """
 import cv2, numpy as np, json, os, time, math
 
@@ -23,8 +23,8 @@ GW, GH = gw2, gh2
 print(f"[可达图] 原{raw_w}x{raw_h} → DS{DS} → {GW}x{GH}")
 
 # ---- 比例尺 (可调节) ----
-scale_factor = 0.20  # 屏幕px→网格格 比例
-print(f"[比例尺] 当前 1屏幕px = {scale_factor:.3f}网格格 (R/T调节)")
+scale_factor = 0.20  # 屏幕px→grid cell 比例
+print(f"[比例尺] 当前 1屏幕px = {scale_factor:.3f}grid cell (R/T adj)")
 
 # ---- YOLO ----
 from ultralytics import YOLO
@@ -65,7 +65,7 @@ def is_blocked(zx, zy):
     dist = math.hypot(dx, dy)
     if dist < 20: return False, 0
     base = math.atan2(dy, dx)
-    # 网格步长: 屏幕距离→网格距离 (比例尺可调)
+    # grid步长: 屏幕距离→grid距离 (比例尺可调)
     grid_dist = int(dist * scale_factor)
     step = max(1, grid_dist // 30); max_steps = grid_dist
     best_ratio = 1.0
@@ -97,7 +97,7 @@ def print_zombie_debug(zombies):
         egy = int(player_gy + gd * math.sin(angle))
         tag = "墙" if blocked else "通"
         short = name.replace('ZB','').replace('Zombie','Z')
-        print(f"  {short} {dist}px → 网格({egx},{egy}) ratio={ratio:.2f} [{tag}]")
+        print(f"  {short} {dist}px → grid({egx},{egy}) ratio={ratio:.2f} [{tag}]")
 
 while True:
     ret, frame = cap.read()
@@ -121,11 +121,11 @@ while True:
     print_zombie_debug(zombies)
 
     for cx, cy, name, dist, blocked, ratio, (x1, y1, x2, y2) in zombies:
-        col = (0, 0, 255) if blocked else (0, 255, 0)  # 红=墙后 绿=可打
+        col = (0, 0, 255) if blocked else (0, 255, 0)  # Red=BLOCKED Green=OK
         thick = 1 if blocked else 2
         cv2.rectangle(disp, (x1, y1), (x2, y2), col, thick)
         tag = f"{name[-8:]} {dist}px"
-        if blocked: tag += f" [墙{ratio:.0%}]"
+        if blocked: tag += f" [W{ratio:.0%}]"
         cv2.putText(disp, tag, (x1, y1 - 5), FONT, 0.35, col, 1)
         # 从中心画射线
         cv2.line(disp, (960, 540), (cx, cy),
@@ -140,9 +140,9 @@ while True:
 
     # 右侧面板
     rx = mw + 10
-    cv2.putText(canvas, "僵尸目标:", (rx, 20), FONT, 0.5, (0, 255, 0), 1)
-    cv2.putText(canvas, "绿=可攻击 红=墙后", (rx, 42), FONT, 0.35, (150, 150, 150), 1)
-    cv2.putText(canvas, f"玩家网格: ({player_gx},{player_gy})", (rx, 65),
+    cv2.putText(canvas, "Targets:", (rx, 20), FONT, 0.5, (0, 255, 0), 1)
+    cv2.putText(canvas, "Green=OK Red=Blocked", (rx, 42), FONT, 0.35, (150, 150, 150), 1)
+    cv2.putText(canvas, f"玩家grid: ({player_gx},{player_gy})", (rx, 65),
                FONT, 0.35, (255, 255, 0), 1)
     y = 90
     valid_count = 0
@@ -150,12 +150,12 @@ while True:
         if not blocked: valid_count += 1
         short = name.replace('ZB', '').replace('Zombie', 'Z')
         col = (100, 100, 255) if blocked else (0, 255, 0)
-        tag = f" [墙]" if blocked else " [可]"
+        tag = f" [W]" if blocked else " [OK]"
         cv2.putText(canvas, f"{short}: {dist}px{tag}",
                    (rx, y), FONT, 0.35, col, 1)
         y += 20
 
-    cv2.putText(canvas, f"可攻击: {valid_count}/{len(zombies)}",
+    cv2.putText(canvas, f"OK: {valid_count}/{len(zombies)}",
                (rx, y + 10), FONT, 0.4, (0, 255, 255), 1)
 
     # 可达图小地图 (右下)
@@ -164,24 +164,24 @@ while True:
     cv2.circle(mm_color, (player_gx * 300 // GW, player_gy * 300 // GH),
               4, (0, 255, 255), -1)
     canvas[350:650, 600:900] = mm_color
-    cv2.putText(canvas, "可达图(点击设玩家位置)", (605, 345),
+    cv2.putText(canvas, "ReachMap(click to set pos)", (605, 345),
                FONT, 0.3, (200, 200, 200), 1)
     # 比例尺显示
-    cv2.putText(canvas, f"比例尺: 1px={scale_factor:.4f}格 (R/T调节)", (10, 610),
+    cv2.putText(canvas, f"Scale: 1px={scale_factor:.4f}cell (R/T adj)", (10, 610),
                FONT, 0.35, (0, 255, 255), 1)
-    cv2.putText(canvas, f"即600px={600*scale_factor:.0f}格", (10, 630),
+    cv2.putText(canvas, f"600px={600*scale_factor:.0f}cell", (10, 630),
                FONT, 0.3, (200, 200, 200), 1)
-    cv2.putText(canvas, "Q=退出 R=+比例 T=-比例", (10, 640), FONT, 0.35, (150, 150, 150), 1)
+    cv2.putText(canvas, "Q=quit R=+scale T=-scale", (10, 640), FONT, 0.35, (150, 150, 150), 1)
 
     cv2.imshow("WallDetect", canvas)
     key = cv2.waitKey(30) & 0xFF
     if key == ord('q'): break
     elif key in (ord('r'), ord('R')):
         scale_factor = min(5.0, scale_factor * 1.25)
-        print(f"  比例尺: 1px={scale_factor:.4f}格 (600px={600*scale_factor:.0f}格)")
+        print(f"  Scale: 1px={scale_factor:.4f}cell (600px={600*scale_factor:.0f}cell)")
     elif key in (ord('t'), ord('T')):
         scale_factor = max(0.01, scale_factor / 1.25)
-        print(f"  比例尺: 1px={scale_factor:.4f}格 (600px={600*scale_factor:.0f}格)")
+        print(f"  Scale: 1px={scale_factor:.4f}cell (600px={600*scale_factor:.0f}cell)")
 
 cap.release()
 cv2.destroyAllWindows()
