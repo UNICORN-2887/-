@@ -57,12 +57,14 @@ def is_blocked(zx, zy):
     dist = math.hypot(dx, dy)
     if dist < 20: return False, 0
     base = math.atan2(dy, dx)
-    step = 3; max_steps = min(150, int(dist / 4))
+    # 网格步长: 屏幕距离映射到网格距离 (约 1px ≈ 0.2格)
+    grid_dist = int(dist * 0.15)
+    step = max(1, grid_dist // 30); max_steps = grid_dist
     best_ratio = 1.0
     for offset in [0, -0.26, 0.26]:
         angle = base + offset
         blocked = 0; total = 0
-        for i in range(step, max_steps, step):
+        for i in range(step, max_steps + 1, step):
             wx = int(player_gx + i * math.cos(angle))
             wy = int(player_gy + i * math.sin(angle))
             if 0 <= wx < GW and 0 <= wy < GH:
@@ -71,6 +73,11 @@ def is_blocked(zx, zy):
                     blocked += 1
         if total > 2:
             best_ratio = min(best_ratio, blocked / total)
+    # 调试: 检查射线路径
+    if dist < 100:  # 只打印近的僵尸
+        end_gx = int(player_gx + grid_dist * math.cos(base))
+        end_gy = int(player_gy + grid_dist * math.sin(base))
+        print(f"  僵尸{dist}px → 网格({end_gx},{end_gy}) ratio={best_ratio:.2f} blocked={best_ratio>0.5}")
     return best_ratio > 0.5, best_ratio
 
 while True:
