@@ -309,32 +309,47 @@ class Navigator:
         gp = astar(self.grid, gs, gg)
         return [self.to_image(*p) for p in gp] if gp else None
 
-    def _plan_patrol(self):
-        """完整巡逻路线: start -> wp[0] -> wp[1] -> ... -> goal"""
-        if self.start is None or self.goal is None:
+    def _plan_next_segment(self):
+        """规划当前段: 从当前位置到下一个目标点"""
+        if self.wp_index < len(self.waypoints):
+            target = self.waypoints[self.wp_index]
+            tag = f"WP{self.wp_index+1}"
+        else:
+            target = self.goal
+            tag = "终点"
+        cur = self.position if self.position else self.start
+        seg = self._plan_segment(cur, target)
+        if seg is None:
+            print(f"[巡逻] -> {tag} 规划失败!")
             return False
-        points = [self.start] + self.waypoints + [self.goal]
-        all_segs = []
-        for i in range(len(points) - 1):
-            seg = self._plan_segment(points[i], points[i + 1])
-            if seg is None:
-                print(f"[巡逻] 段{i} 规划失败!")
-                return False
-            all_segs.append(seg)
-        full = []
-        for s in all_segs:
-            full.extend(s if not full else s[1:])
-        self.path = full
+        self.path = seg
         self.current_waypoint = 0
+        print(f"[巡逻] -> {tag} ({len(seg)}步)")
+        return True
+
+    def _plan_patrol(self):
+        """初始化巡逻: 验证可达, 规划第一段"""
+        if self.start is None:
+            return False
+        if not self.waypoints and self.goal is None:
+            return False
         self.wp_index = 0
+        if not self._plan_next_segment():
+            return False
         n = len(self.waypoints)
-        print(f"[巡逻] 起点 -> " + " -> ".join(
-            [f"WP{i+1}" for i in range(n)]) + f" -> 终点 ({len(full)}步)")
+        if n:
+            wps = " -> ".join([f"WP{i+1}" for i in range(n)])
+            print(f"[巡逻] 路线: 起点 -> {wps}" +
+                  (f" -> 终点" if self.goal else " (循环)"))
+        else:
+            print(f"[巡逻] 路线: 起点 -> 终点")
         self.state = self.STATE_READY
         return True
 
     def plan_path(self):
-        """兼容旧接口: 简单起点->终点"""
+        """兼容旧接口"""
+        if self.goal is None:
+            return False
         self.waypoints = []
         return self._plan_patrol()
 
@@ -793,19 +808,33 @@ class Navigator:
         self.current_waypoint = max(self.current_waypoint, wp_idx - 2)
         wx, wy = self.path[wp_idx]
 
-        # 检查是否到达路标 → 等待3秒
-        if np.hypot(px - wx, py - wy) < WAYPOINT_REACH_THRESHOLD:
+        # 检查是否到达当前段终点 → 等待3秒 → 切下一段
+        if wp_idx >= len(self.path) - 1 and np.hypot(px - wx, py - wy) < WAYPOINT_REACH_THRESHOLD:
             if self.last_waypoint_time == 0:
                 self.last_waypoint_time = time.time()
-                print(f"[巡逻] 到达途径点#{wp_idx}, 等待3秒...")
+                # 确定当前到达的是哪个目标
+                if self.wp_index < len(self.waypoints):
+                    tag = f"途径点#{self.wp_index+1}"
+                else:
+                    tag = "终点"
+                print(f"[巡逻] 到达{tag}, 等待3秒...")
             elif time.time() - self.last_waypoint_time >= 3.0:
-                self.current_waypoint = wp_idx + 1
-                if self.current_waypoint >= len(self.path):
-                    self.current_waypoint = len(self.path) - 1
                 self.last_waypoint_time = 0
-                print(f"[巡逻] → 下一途径点#{self.current_waypoint}")
-            # 等待期间不移动
-            self.status_msg = f"途径点#{wp_idx} 等待中 ({time.time()-self.last_waypoint_time:.1f}s/3s)"
+                # 切到下一个目标
+                if self.wp_index < len(self.waypoints):
+                    self.wp_index += 1
+                    # 如果是循环(无终点)且走完所有途径点: 回到WP0
+                    if self.goal is None and self.wp_index >= len(self.waypoints):
+                        self.wp_index = 0
+                        print("[巡逻] 循环: 回到WP1")
+                    self._plan_next_segment()
+                else:
+                    # 到达终点
+                    print(f"[巡逻] 到达终点!")
+                    self.state = self.STATE_IDLE
+                    self.status_msg = "巡逻完成"
+                    return
+            self.status_msg = f"等待中 ({time.time()-self.last_waypoint_time:.1f}s/3s)"
             return
         else:
             self.last_waypoint_time = 0
