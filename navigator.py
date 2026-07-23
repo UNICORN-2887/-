@@ -1064,11 +1064,25 @@ class Navigator:
         self.current_waypoint = max(self.current_waypoint, wp_idx - 2)
         wx, wy = self.path[wp_idx]
 
-        # 0. 途径点等待中? 停止一切移动, 倒计时
+        # 0. 途径点等待中? 停止移动, 检查是否进入战斗
         if self.last_waypoint_time > 0:
+            # 等待期间检测到僵尸且符合条件 → 立刻进入战斗
+            if self.combat_state is None and self.skip_count == 0:
+                zombies_near = [z for z in self.zombie_list if z[3] < self.ZOMBIE_THRESHOLD]
+                if (self.hp_pct >= self.COMBAT_ENTRY_HP and
+                        len(zombies_near) < self.COMBAT_ENTRY_MAX_ZOMBIES and
+                        zombies_near):
+                    self.combat_state = 'chasing'
+                    self.combat_target = zombies_near[0]
+                    self.chase_start_time = time.time()
+                    self.waypoint_combat_start = time.time()
+                    self.last_waypoint_time = 0
+                    print(f"[战斗] 途径点检测到僵尸, 进入战斗! HP={self.hp_pct}% n={len(zombies_near)}")
+                    self.status_msg = "战斗: 追击中"
+                    return
             if time.time() - self.last_waypoint_time < 1.0:
                 self.status_msg = f"途径点等待 {time.time()-self.last_waypoint_time:.1f}s/1s"
-                return  # 不移动
+                return
             # 时间到, 切下一段
             self.last_waypoint_time = 0
             self.wp_index += 1
