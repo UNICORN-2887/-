@@ -789,28 +789,29 @@ class Navigator:
         self.zombie_list = zombies
 
     def _is_blocked_by_wall(self, zx, zy, px, py):
-        """射线法检测僵尸是否被墙阻挡(可达图)"""
+        """锥形射线法检测僵尸是否被墙阻挡 — 检查主方向±15度"""
         import math
-        dx = zx - 960   # 画面中心=玩家
-        dy = zy - 540
+        dx = zx - 960; dy = zy - 540
         dist = math.hypot(dx, dy)
-        if dist < 20: return False  # 贴脸不检测
-        # 玩家网格坐标
+        if dist < 20: return False
         gx, gy = self.to_grid(int(px), int(py))
-        angle = math.atan2(dy, dx)
-        step = 2
-        max_steps = min(200, int(dist / 3))
-        blocked = 0
-        total = 0
-        for i in range(step, max_steps, step):
-            wx = int(gx + i * math.cos(angle))
-            wy = int(gy + i * math.sin(angle))
-            if 0 <= wx < self.grid.shape[1] and 0 <= wy < self.grid.shape[0]:
-                total += 1
-                if self.grid[wy, wx] == 0:
-                    blocked += 1
-        if total < 3: return False
-        return (blocked / total) > 0.4  # 超过40%不可达=有墙阻挡
+        base_angle = math.atan2(dy, dx)
+        step = 3; max_steps = min(150, int(dist / 4))
+        # 检查3条射线: 主方向 ±15度
+        best_ratio = 1.0
+        for offset in [0, -0.26, 0.26]:  # 0, ±15度
+            angle = base_angle + offset
+            blocked = 0; total = 0
+            for i in range(step, max_steps, step):
+                wx = int(gx + i * math.cos(angle))
+                wy = int(gy + i * math.sin(angle))
+                if 0 <= wx < self.grid.shape[1] and 0 <= wy < self.grid.shape[0]:
+                    total += 1
+                    if self.grid[wy, wx] == 0:
+                        blocked += 1
+            if total > 2:
+                best_ratio = min(best_ratio, blocked / total)
+        return best_ratio > 0.5  # >50%不可达=有墙
 
     def _find_nearest_waypoint_idx(self, px, py):
         """找离当前位置直线距离最近的途径点索引"""
@@ -1309,6 +1310,11 @@ class Navigator:
         # Hunger / Thirst
         cv2.putText(canvas, f"H: {self.hunger_val}  T: {self.thirst_val}",
                    (sbx + 3, y), FONT, 0.3, (200, 200, 200), 1)
+        y += 14
+        # 玩家坐标
+        if self.position:
+            cv2.putText(canvas, f"pos: ({self.position[0]},{self.position[1]})",
+                       (sbx + 3, y), FONT, 0.25, (150, 150, 150), 1)
         y += 18
 
         # 技能

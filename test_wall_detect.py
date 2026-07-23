@@ -50,24 +50,26 @@ def on_mouse(event, sx, sy, flags, param):
 cv2.setMouseCallback("WallDetect", on_mouse)
 
 def is_blocked(zx, zy):
-    """射线检测墙阻挡"""
-    dx = zx - 960
-    dy = zy - 540
+    """锥形射线检测 — 3条射线取最优"""
+    dx = zx - 960; dy = zy - 540
     dist = math.hypot(dx, dy)
     if dist < 20: return False, 0
-    angle = math.atan2(dy, dx)
-    step = 2; max_steps = min(200, int(dist / 3))
-    blocked = 0; total = 0
-    for i in range(step, max_steps, step):
-        wx = int(player_gx + i * math.cos(angle))
-        wy = int(player_gy + i * math.sin(angle))
-        if 0 <= wx < GW and 0 <= wy < GH:
-            total += 1
-            if grid[wy, wx] == 0:
-                blocked += 1
-    if total < 3: return False, 0
-    ratio = blocked / total
-    return ratio > 0.4, ratio
+    base = math.atan2(dy, dx)
+    step = 3; max_steps = min(150, int(dist / 4))
+    best_ratio = 1.0
+    for offset in [0, -0.26, 0.26]:
+        angle = base + offset
+        blocked = 0; total = 0
+        for i in range(step, max_steps, step):
+            wx = int(player_gx + i * math.cos(angle))
+            wy = int(player_gy + i * math.sin(angle))
+            if 0 <= wx < GW and 0 <= wy < GH:
+                total += 1
+                if grid[wy, wx] == 0:
+                    blocked += 1
+        if total > 2:
+            best_ratio = min(best_ratio, blocked / total)
+    return best_ratio > 0.5, best_ratio
 
 while True:
     ret, frame = cap.read()
