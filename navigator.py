@@ -272,6 +272,19 @@ class Navigator:
         self.loop_patrol = False    # 循环巡逻模式
         self._patrol_start = None   # 巡逻起点(循环时回到这里)
 
+        # ---- 战斗系统 ----
+        self.combat_state = None     # None | 'chasing' | 'attacking'
+        self.skip_count = 0          # 跳过途径点计数
+        self.combat_target = None    # (cx, cy, name) 当前追击僵尸
+        self.last_attack_time = 0    # 上次攻击时间
+        self.zombie_list = []        # [(cx, cy, name), ...] 画面中僵尸列表
+        self.hp_pct = 100            # 血量百分比
+        self.hunger_val = 0          # 饱食度
+        self.thirst_val = 0          # 口渴度
+        self._hp_roi = None          # HP检测ROI
+        self._hunger_roi = None      # 饱食度ROI
+        self._thirst_roi = None      # 口渴度ROI
+
         # 中键拖拽
         self._dragging = False
         self._dsx = self._dsy = 0
@@ -716,6 +729,200 @@ class Navigator:
         return ("leave", None)
 
     # ----------------------------------------------------------
+    # 战斗系统
+    # ----------------------------------------------------------
+    ZOMBIE_THRESHOLD = 300      # 僵尸判定距离(px)
+    ATTACK_RANGE = 70           # 攻击距离(px)
+    ATTACK_INTERVAL = 0.7       # 攻击间隔(秒)
+    HEAL_THRESHOLD = 80         # 补血阈值(%)
+    ESCAPE_THRESHOLD = 20       # 脱战血量(%)
+    COMBAT_ENTRY_HP = 70        # 进入战斗最低血量(%)
+    COMBAT_ENTRY_MAX_ZOMBIES = 6  # 进入战斗最多僵尸数
+    ATTACK_BTN = "leave_campfire"  # 攻击按钮(别名)
+
+    def _read_status_values(self, frame):
+        """从OBS帧读取HP/饱食/口渴"""
+        import cv2
+        if frame is None: return
+        # HP 绿色血条
+        hp_file = os.path.join(os.path.dirname(__file__),
+                               'AImaneuver', 'hp_detector_roi.json')
+        if self._hp_roi is None and os.path.exists(hp_file):
+            self._hp_roi = json.load(open(hp_file))
+        if self._hp_roi:
+            hx, hy, hw, hh = [max(1, int(v)) for v in self._hp_roi]
+            hp_roi = frame[hy:hy + hh, hx:hx + hw]
+            if hp_roi.size > 0:
+                hsv = cv2.cvtColor(hp_roi, cv2.COLOR_BGR2HSV)
+                gm = cv2.inRange(hsv, np.array([35, 40, 40]),
+                                 np.array([85, 255, 255]))
+                self.hp_pct = int(np.count_nonzero(gm) / gm.size * 100)
+
+    def _detect_zombies(self, frame):
+        """YOLO检测僵尸, 返回[(cx, cy, name, dist), ...]"""
+        if not self.yolo or frame is None: return
+        det = self.yolo(frame, verbose=False, conf=0.3)[0]
+        self.yolo_disp = cv2.resize(det.plot(), (200, 120))
+        counts = {}
+        zombies = []
+        fh, fw = frame.shape[:2]
+        player_cx, player_cy = fw // 2, fh  # 玩家在画面底部中央
+        for b in det.boxes:
+            name = self.yolo.names[int(b.cls[0])]
+            if 'ZB' in name.upper() or 'ZOMBIE' in name.upper():
+                counts[name] = counts.get(name, 0) + 1
+                x1, y1, x2, y2 = map(int, b.xyxy[0])
+                cx = (x1 + x2) // 2
+                cy = (y1 + y2) // 2  # 僵尸底部(脚部)
+                dist = int(np.hypot(cx - player_cx, cy - player_cy))
+                zombies.append((cx, cy, name, dist))
+        self.zombie_counts = counts
+        # 按距离排序
+        zombies.sort(key=lambda z: z[3])
+        self.zombie_list = zombies
+
+    def _find_nearest_waypoint_idx(self, px, py):
+        """找离当前位置直线距离最近的途径点索引"""
+        if not self.waypoints: return -1
+        best_i = 0
+        best_d = float('inf')
+        for i, (wx, wy) in enumerate(self.waypoints):
+            d = np.hypot(px - wx, py - wy)
+            if d < best_d:
+                best_d = d
+                best_i = i
+        return best_i
+
+    def _escape_to_waypoint(self, px, py):
+        """脱战: 空格 → A*回最近途径点 → 跳过模式下5个点"""
+        if self.ctrl:
+            try:
+                self.ctrl.press(_wc.VK_SPACE, 0.15)
+            except Exception:
+                pass
+        wp_i = self._find_nearest_waypoint_idx(px, py)
+        self.combat_state = None
+        self.combat_target = None
+        self.skip_count = 5
+        self.wp_index = wp_i
+        self.goal = self.waypoints[wp_i]
+        self.start = (px, py)
+        self.plan_path(to_goal_only=True)
+        if self.state == self.STATE_READY:
+            self.state = self.STATE_NAVIGATING
+        print(f"[战斗] 空格脱战 → WP{wp_i+1} 跳过5点")
+        self.last_waypoint_time = 0  # 清除等待状态
+
+    def _combat_logic(self, px, py):
+        """战斗状态机: 规则1补血 > 规则2脱战 > 战斗/巡逻"""
+        # ---- 规则1: 全局补血 ----
+        if self.hp_pct < self.HEAL_THRESHOLD and self.ctrl:
+            if self.skills.is_ready(1):  # skill_2 补血
+                self.skills.use(1, self.ctrl)
+
+        # ---- 规则2: 血量过低 ----
+        if self.hp_pct < self.ESCAPE_THRESHOLD and self.combat_state is None:
+            self._escape_to_waypoint(px, py)
+            return
+
+        # ---- 战斗状态 ----
+        if self.combat_state is not None:
+            return self._combat_step(px, py)
+
+        # ---- 巡逻中抵达途径点: 判断是否进入战斗 ----
+        if self.last_waypoint_time > 0:  # 正在途径点等待
+            if self.skip_count > 0:  # 跳过模式: 不等直接走
+                self.last_waypoint_time = time.time() + 999  # 跳过等待
+            return
+
+    def _combat_step(self, px, py):
+        """战斗步进"""
+        if self.combat_state == 'chasing':
+            # 追最近僵尸
+            if self.zombie_list:
+                self.combat_target = self.zombie_list[0]  # (cx, cy, name, dist)
+                zx, zy, zname, zdist = self.combat_target
+                if zdist < self.ATTACK_RANGE:
+                    self.combat_state = 'attacking'
+                    print(f"[战斗] 进入攻击范围 {zname} dist={zdist}")
+                else:
+                    # WASD朝向僵尸 (画面中心=玩家位置)
+                    frame_w = 1920  # OBS宽度
+                    frame_h = 1080
+                    dx = zx - frame_w // 2
+                    dy = zy - frame_h // 2
+                    di = best_direction(dx, dy)
+                    keys = DIR_VECTORS[di][2:]
+                    if self.ctrl:
+                        self._move_keys(keys)
+                    # 冷却好了就放技能1/3/4
+                    for sk in [0, 2, 3]:
+                        if self.skills.is_ready(sk):
+                            self.skills.use(sk, self.ctrl)
+                            break
+
+        elif self.combat_state == 'attacking':
+            # 攻击
+            now = time.time()
+            if now - self.last_attack_time >= self.ATTACK_INTERVAL and self.ctrl:
+                cp_file = os.path.join(os.path.dirname(__file__),
+                                       'AImaneuver', 'click_points.json')
+                try:
+                    click_pts = json.load(open(cp_file))
+                    atk = click_pts.get(self.ATTACK_BTN, {"x": 920, "y": 313})
+                    lp = _wa.MAKELONG(atk["x"], atk["y"])
+                    _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp)
+                    time.sleep(0.02)
+                    _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
+                    self.last_attack_time = now
+                    print(f"[攻击] click ({atk['x']},{atk['y']})")
+                except Exception:
+                    pass
+                # 技能1/3/4轮流
+                for sk in [0, 2, 3]:
+                    if self.skills.is_ready(sk):
+                        self.skills.use(sk, self.ctrl)
+                        break
+
+            # 检查脱战条件
+            self._detect_zombies(self._last_frame if hasattr(self, '_last_frame') else None)
+            if self.hp_pct < self.ESCAPE_THRESHOLD:
+                self._escape_to_waypoint(px, py)
+                return
+            if not self.zombie_list or self.zombie_list[0][3] > self.ZOMBIE_THRESHOLD:
+                print("[战斗] 300px内无僵尸, 脱战回巡逻")
+                self.combat_state = None
+                self.combat_target = None
+                wp_i = self._find_nearest_waypoint_idx(px, py)
+                self.wp_index = wp_i
+                self.goal = self.waypoints[wp_i]
+                self.start = (px, py)
+                self.plan_path(to_goal_only=True)
+                if self.state == self.STATE_READY:
+                    self.state = self.STATE_NAVIGATING
+                self.last_waypoint_time = 0
+                return
+
+    def _move_keys(self, keys):
+        """移动按键"""
+        all_vks = {'W': self.ctrl.VK_W, 'A': self.ctrl.VK_A,
+                   'S': self.ctrl.VK_S, 'D': self.ctrl.VK_D}
+        needed = set(keys)
+        for name, vk in all_vks.items():
+            if name not in needed:
+                try: self.ctrl.key_up(vk)
+                except Exception: pass
+        for k in keys:
+            try: self.ctrl.key_down(
+                    getattr(self.ctrl, f'VK_{k}', ord(k)))
+            except Exception: pass
+        time.sleep(0.2)
+        for k in keys:
+            try: self.ctrl.key_up(
+                    getattr(self.ctrl, f'VK_{k}', ord(k)))
+            except Exception: pass
+
+    # ----------------------------------------------------------
     def navigate_step(self):
         """单步导航: 定位 → 找路标 → 移动"""
         if self.state != self.STATE_NAVIGATING:
@@ -731,6 +938,18 @@ class Navigator:
             self.position = self.tracker.last_position
         px, py = self.position if self.position else self.start
         px, py = int(px), int(py)
+
+        # ★ 状态检测 + 僵尸检测 (每步)
+        if self.tracker and self.tracker.cap:
+            ret, sf = self.tracker.cap.read()
+            if ret:
+                self._read_status_values(sf)
+                self._detect_zombies(sf)
+                self._last_frame = sf
+
+        # ★ 战斗逻辑 (规则1补血 > 规则2脱战 > 战斗/巡逻判定)
+        if self.hp_pct > 0:
+            self._combat_logic(px, py)
 
         # 2. 返航模式才触发火堆交互
         HOME_REACH = int(GOAL_REACH_THRESHOLD * 1.5)
@@ -772,8 +991,8 @@ class Navigator:
 
         # 0. 途径点等待中? 停止一切移动, 倒计时
         if self.last_waypoint_time > 0:
-            if time.time() - self.last_waypoint_time < 3.0:
-                self.status_msg = f"途径点等待 {time.time()-self.last_waypoint_time:.1f}s/3s"
+            if time.time() - self.last_waypoint_time < 1.0:
+                self.status_msg = f"途径点等待 {time.time()-self.last_waypoint_time:.1f}s/1s"
                 return  # 不移动
             # 时间到, 切下一段
             self.last_waypoint_time = 0
@@ -807,14 +1026,30 @@ class Navigator:
             gx, gy = self.goal
             d_goal = np.hypot(px - gx, py - gy)
             if d_goal < GOAL_REACH_THRESHOLD:
-                # 还有下一途径点或循环?
                 has_next = (self.waypoints and
                            (self.wp_index + 1 < len(self.waypoints) or self.loop_patrol))
                 if has_next:
+                    # 跳过模式: 不等直接走
+                    if self.skip_count > 0:
+                        self.skip_count -= 1
+                        self.last_waypoint_time = time.time() + 999  # 触发跳过
+                        self.status_msg = f"跳过WP{self.wp_index+1} (剩余{self.skip_count})"
+                        return
+                    # 战斗条件: HP>=70% 且 300px内僵尸<6 → 进入战斗
+                    zombies_near = [z for z in self.zombie_list if z[3] < self.ZOMBIE_THRESHOLD]
+                    if (self.hp_pct >= self.COMBAT_ENTRY_HP and
+                            len(zombies_near) < self.COMBAT_ENTRY_MAX_ZOMBIES and
+                            zombies_near):
+                        self.combat_state = 'chasing'
+                        self.combat_target = zombies_near[0]
+                        print(f"[战斗] 进入战斗! HP={self.hp_pct}% 僵尸={len(zombies_near)}只")
+                        self.status_msg = f"战斗: 追击中"
+                        return
+                    # 正常等待1秒
                     self.last_waypoint_time = time.time()
                     tag = f"途径点#{self.wp_index+1}"
-                    print(f"[巡逻] 到达{tag}, 等待3秒...")
-                    self.status_msg = f"{tag} 等待 0s/3s"
+                    print(f"[巡逻] 到达{tag}, 等待1秒...")
+                    self.status_msg = f"{tag} 等待中"
                     return
                 # 到达终点
                 print(f"[!] 到达终点! (距目标{d_goal:.0f}px)")
@@ -824,22 +1059,7 @@ class Navigator:
 
         # 4. 检查偏离
 
-        # 6. YOLO 僵尸检测 (每步检测一次)
-        if self.yolo and self.tracker:
-            ret, yf = self.tracker.cap.read()
-            if ret:
-                det = self.yolo(yf, verbose=False, conf=0.3)[0]
-                self.yolo_disp = cv2.resize(det.plot(), (200, 120))
-                # 统计僵尸
-                counts = {}
-                for b in det.boxes:
-                    name = self.yolo.names[int(b.cls[0])]
-                    # 只统计僵尸类 (名字以ZB或Zombie结尾)
-                    if 'ZB' in name.upper() or 'ZOMBIE' in name.upper():
-                        counts[name] = counts.get(name, 0) + 1
-                self.zombie_counts = counts
-
-        # 7. 8方向拟合 + 移动
+        # 5. 8方向拟合 + 移动
         dx = wx - px
         dy = wy - py
         di = best_direction(dx, dy)
@@ -1035,50 +1255,84 @@ class Navigator:
                            (0, 255, 0) if ch and it['name'] == ch['name'] else (150, 150, 150), 1)
                 y += 12
 
-        # ---- 技能冷却面板 ----
-        if self.skills:
-            sx_, sy_ = VW - 220, 5
-            now = time.time()
-            cv2.rectangle(canvas, (sx_, sy_), (sx_ + 215, sy_ + 90), (40, 40, 40), -1)
-            cv2.rectangle(canvas, (sx_, sy_), (sx_ + 215, sy_ + 90), (0, 200, 200), 1)
-            cv2.putText(canvas, "技能冷却", (sx_ + 3, sy_ + 16), FONT, 0.4, (0, 255, 255), 1)
-            for i in range(4):
-                cd = self.skills.cooldowns[i]
-                rem = self.skills.remaining(i, now)
-                ready = rem <= 0
-                col = (0, 255, 0) if ready else (255, 100, 100)
-                bar_w = int(100 * (1 - rem / cd)) if cd > 0 else 100
-                cv2.putText(canvas, f"skill_{i+1}:", (sx_ + 3, sy_ + 34 + i * 16),
-                           FONT, 0.3, (200, 200, 200), 1)
-                # 冷却条
-                bx2, by2 = sx_ + 55, sy_ + 37 + i * 16
-                cv2.rectangle(canvas, (bx2, by2 - 8), (bx2 + 100, by2), (60, 60, 60), -1)
-                if bar_w > 0:
-                    cv2.rectangle(canvas, (bx2, by2 - 8), (bx2 + bar_w, by2), col, -1)
-                txt2 = "READY" if ready else f"{rem:.1f}s"
-                cv2.putText(canvas, txt2, (bx2 + 105, by2 + 1), FONT, 0.28, col, 1)
+        # ---- 右侧状态栏 ----
+        sbx, sby = VW - 185, 5
+        sbw = 180
+        now = time.time()
 
-        # ---- YOLO 僵尸检测画面 ----
+        # 背景
+        cv2.rectangle(canvas, (sbx, sby), (sbx + sbw, VH - 5), (35, 35, 35), -1)
+        cv2.rectangle(canvas, (sbx, sby), (sbx + sbw, VH - 5), (100, 100, 100), 1)
+
+        y = sby + 15
+        cv2.putText(canvas, "状态", (sbx + 3, y), FONT, 0.4, (0, 255, 0), 1)
+        y += 18
+
+        # HP 血条
+        hp = self.hp_pct
+        hp_col = (0, 255, 0) if hp > 50 else (0, 200, 255) if hp > 20 else (0, 0, 255)
+        cv2.putText(canvas, f"HP: {hp}%", (sbx + 3, y), FONT, 0.32, hp_col, 1)
+        cv2.rectangle(canvas, (sbx + 55, y - 8), (sbx + 170, y + 2), (60, 60, 60), -1)
+        cv2.rectangle(canvas, (sbx + 55, y - 8), (sbx + 55 + int(115 * hp / 100), y + 2), hp_col, -1)
+        y += 16
+        # Hunger / Thirst
+        cv2.putText(canvas, f"H: {self.hunger_val}  T: {self.thirst_val}",
+                   (sbx + 3, y), FONT, 0.3, (200, 200, 200), 1)
+        y += 18
+
+        # 技能
+        cv2.putText(canvas, "技能", (sbx + 3, y), FONT, 0.35, (0, 255, 255), 1)
+        y += 14
+        for i in range(4):
+            cd = self.skills.cooldowns[i]
+            rem = self.skills.remaining(i, now)
+            ready = rem <= 0
+            col = (0, 255, 0) if ready else (255, 100, 100)
+            bar_w = int(100 * (1 - rem / cd)) if cd > 0 else 100
+            cv2.putText(canvas, f"{i+1}:", (sbx + 3, y), FONT, 0.28, (200, 200, 200), 1)
+            cv2.rectangle(canvas, (sbx + 20, y - 7), (sbx + 120, y + 1), (50, 50, 50), -1)
+            if bar_w > 0:
+                cv2.rectangle(canvas, (sbx + 20, y - 7), (sbx + 20 + bar_w, y + 1), col, -1)
+            cv2.putText(canvas, "OK" if ready else f"{rem:.0f}s",
+                       (sbx + 123, y + 2), FONT, 0.25, col, 1)
+            y += 11
+        y += 4
+
+        # 战斗状态
+        ctag = "巡逻中" if self.combat_state is None else f"战斗:{self.combat_state}"
+        cv2.putText(canvas, ctag, (sbx + 3, y), FONT, 0.3, (0, 255, 200), 1)
+        y += 14
+        if self.skip_count > 0:
+            cv2.putText(canvas, f"跳过: {self.skip_count}/5", (sbx + 3, y),
+                       FONT, 0.3, (255, 150, 0), 1)
+            y += 14
+        y += 2
+
+        # YOLO 画面
         if self.yolo_disp is not None:
-            yx, yy = VW - 210, 100
             yd_h, yd_w = self.yolo_disp.shape[:2]
-            canvas[yy:yy + yd_h, yx:yx + yd_w] = self.yolo_disp
-            cv2.rectangle(canvas, (yx, yy), (yx + yd_w, yy + yd_h), (0, 255, 0), 1)
-            cv2.putText(canvas, "YOLO", (yx, yy - 4), FONT, 0.35, (0, 255, 0), 1)
-
-            # 僵尸统计
-            zy = yy + yd_h + 5
-            cv2.putText(canvas, "僵尸:", (yx, zy), FONT, 0.3, (255, 200, 100), 1)
-            zy += 12
-            if self.zombie_counts:
-                for name_, count_ in sorted(self.zombie_counts.items()):
-                    # 简化名称
-                    short = name_.replace('ZB', '').replace('Zombie', 'Z')
-                    cv2.putText(canvas, f"  {short}: {count_}",
-                               (yx, zy), FONT, 0.28, (200, 200, 200), 1)
-                    zy += 11
+            if yd_w > sbw - 5:  # 缩放到面板宽度
+                scale = (sbw - 5) / yd_w
+                yd_w = sbw - 5
+                yd_h = int(yd_h * scale)
+                ydisp = cv2.resize(self.yolo_disp, (yd_w, yd_h))
             else:
-                cv2.putText(canvas, "  (无)", (yx, zy), FONT, 0.28, (150, 150, 150), 1)
+                ydisp = self.yolo_disp
+            canvas[y:y + yd_h, sbx + 3:sbx + 3 + yd_w] = ydisp
+            cv2.rectangle(canvas, (sbx + 2, y - 1), (sbx + 4 + yd_w, y + yd_h), (0, 255, 0), 1)
+            y += yd_h + 4
+
+        # 僵尸统计
+        cv2.putText(canvas, "僵尸:", (sbx + 3, y), FONT, 0.28, (255, 200, 100), 1)
+        y += 12
+        if self.zombie_counts:
+            for name_, count_ in sorted(self.zombie_counts.items()):
+                short = name_.replace('ZB', '').replace('Zombie', 'Z')
+                cv2.putText(canvas, f"  {short}: {count_}", (sbx + 3, y),
+                           FONT, 0.26, (200, 200, 200), 1)
+                y += 10
+        else:
+            cv2.putText(canvas, "  (无)", (sbx + 3, y), FONT, 0.26, (150, 150, 150), 1)
 
         help_text = "左=起点/WP 右=终点 M=循环 R=重置 Enter=导航 空格=暂停 H=返航 Q=退出"
         cv2.putText(canvas, help_text,
