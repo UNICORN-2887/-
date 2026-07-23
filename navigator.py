@@ -796,7 +796,8 @@ class Navigator:
         if dist < 20: return False
         gx, gy = self.to_grid(int(px), int(py))
         base_angle = math.atan2(dy, dx)
-        step = 3; max_steps = min(150, int(dist / 4))
+        grid_dist = int(dist * 0.15)
+        step = max(1, grid_dist // 30); max_steps = grid_dist
         # 检查3条射线: 主方向 ±15度
         best_ratio = 1.0
         for offset in [0, -0.26, 0.26]:  # 0, ±15度
