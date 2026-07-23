@@ -776,7 +776,7 @@ class Navigator:
                 name = self.yolo.names[int(b.cls[0])]
                 x1, y1, x2, y2 = map(int, b.xyxy[0])
                 cx = (x1 + x2) // 2; cy = (y1 + y2) // 2
-                if abs(cx - tzx) < 5 and abs(cy - tzy) < 5:
+                if abs(cx - tzx) < 30 and abs(cy - tzy) < 30:
                     cv2.rectangle(ydisp, (x1, y1), (x2, y2), (0, 255, 255), 3)
                     short = name.replace('ZB','').replace('Zombie','Z')
                     cv2.putText(ydisp, f"TARGET:{short}", (x1, y1 - 10),
@@ -977,6 +977,14 @@ class Navigator:
             self._detect_zombies(self._last_frame if hasattr(self, '_last_frame') else None)
             if self.hp_pct < self.ESCAPE_THRESHOLD:
                 self._escape_to_waypoint(px, py)
+                return
+            # 目标跑出攻击范围但仍<600px → 切回追击
+            if (self.zombie_list and self.zombie_list[0][3] > self.ATTACK_RANGE and
+                    self.zombie_list[0][3] < self.ZOMBIE_THRESHOLD):
+                self.combat_state = 'chasing'
+                self.combat_target = self.zombie_list[0]
+                self.chase_start_time = time.time()
+                print(f"[战斗] 目标跑远 {self.zombie_list[0][3]}px, 继续追击")
                 return
             if not self.zombie_list or self.zombie_list[0][3] > self.ZOMBIE_THRESHOLD:
                 print("[战斗] 300px内无僵尸, 脱战回巡逻")
