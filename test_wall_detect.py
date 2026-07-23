@@ -40,12 +40,14 @@ print("Q=退出\n")
 def on_mouse(event, sx, sy, flags, param):
     global player_gx, player_gy
     if event == cv2.EVENT_LBUTTONDOWN:
-        # 右侧小地图坐标转网格坐标
-        mgx = int(sx * GW / 300) if sx < 300 else player_gx
-        mgy = int(sy * GH / 300) if sy < 300 else player_gy
-        player_gx = max(0, min(GW - 1, mgx))
-        player_gy = max(0, min(GH - 1, mgy))
-        print(f"[玩家] 可达图位置: ({player_gx}, {player_gy})")
+        # 小地图在canvas位置(600,350), 大小300x300
+        mm_x, mm_y, mm_s = 600, 350, 300
+        if mm_x <= sx <= mm_x + mm_s and mm_y <= sy <= mm_y + mm_s:
+            player_gx = int((sx - mm_x) * GW / mm_s)
+            player_gy = int((sy - mm_y) * GH / mm_s)
+            player_gx = max(0, min(GW - 1, player_gx))
+            player_gy = max(0, min(GH - 1, player_gy))
+            print(f"[玩家] 可达图: ({player_gx}, {player_gy})")
 
 cv2.setMouseCallback("WallDetect", on_mouse)
 
