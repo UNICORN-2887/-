@@ -732,14 +732,13 @@ class Navigator:
         px, py = self.position if self.position else self.start
         px, py = int(px), int(py)
 
-        # 2. 检查是否到达火堆 (离火堆近就自动交互, 用更大阈值)
+        # 2. 返航模式才触发火堆交互
         HOME_REACH = int(GOAL_REACH_THRESHOLD * 1.5)
-        if self.home:
+        if self.returning_home and self.home:
             hx, hy = self.home
             d_home = np.hypot(px - hx, py - hy)
             if d_home < HOME_REACH:
-                tag = "返航" if self.returning_home else "到达火堆"
-                print(f"\n{'='*40}\n[{tag}] 距火堆{d_home:.0f}px < {HOME_REACH}px, 触发火堆交互\n{'='*40}")
+                print(f"\n{'='*40}\n[返航] 距火堆{d_home:.0f}px, 触发火堆交互\n{'='*40}")
                 self.state = self.STATE_IDLE
                 self.returning_home = False
                 self._fire_camp_interact()
@@ -775,11 +774,6 @@ class Navigator:
         gx, gy = self.goal if self.goal else (wx, wy)
         d_goal = np.hypot(px - gx, py - gy)
         if d_goal < GOAL_REACH_THRESHOLD:
-            # 火堆检查
-            if self.home and np.hypot(gx - self.home[0], gy - self.home[1]) < HOME_REACH:
-                self.state = self.STATE_IDLE; self.returning_home = False
-                self._fire_camp_interact(); return
-
             # 多途径点: 等待3秒 → 切到下一个
             if self.waypoints and self.wp_index + 1 < len(self.waypoints):
                 tag = f"途径点#{self.wp_index+1}"
