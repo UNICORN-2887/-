@@ -756,7 +756,7 @@ class Navigator:
                     except Exception:
                         pass
             self.start = (px, py)
-            if not self.plan_path():
+            if not self.plan_path(to_goal_only=True):
                 self.status_msg = "重规划失败"
                 self.state = self.STATE_IDLE
                 return
