@@ -283,9 +283,14 @@ class Navigator:
         self.hp_pct = 100            # 血量百分比
         self.hunger_val = 0          # 饱食度
         self.thirst_val = 0          # 口渴度
+        self.stamina_val = 0         # 耐力
         self._hp_roi = None          # HP检测ROI
         self._hunger_roi = None      # 饱食度ROI
         self._thirst_roi = None      # 口渴度ROI
+        self._stamina_roi = None     # 耐力ROI
+        self._ocr_en = None          # EasyOCR英文(状态读取)
+        self._post_supply_check = False  # 补给后检查标志
+        self._low_stat_triggered = False  # 低状态返航已触发
 
         # 中键拖拽
         self._dragging = False
@@ -747,7 +752,7 @@ class Navigator:
     ATTACK_BTN = "leave_campfire"  # 攻击按钮(别名)
 
     def _read_status_values(self, frame):
-        """从OBS帧读取HP/饱食/口渴"""
+        """从OBS帧读取HP/饱食/口渴/耐力"""
         import cv2
         if frame is None: return
         # HP 绿色血条
@@ -763,6 +768,40 @@ class Navigator:
                 gm = cv2.inRange(hsv, np.array([35, 40, 40]),
                                  np.array([85, 255, 255]))
                 self.hp_pct = int(np.count_nonzero(gm) / gm.size * 100)
+
+        # OCR状态(饱食/口渴/耐力) — 每5秒读一次避免性能问题
+        if self._ocr_en is None:
+            try:
+                import easyocr
+                self._ocr_en = easyocr.Reader(["en"], gpu=True)
+            except Exception:
+                return
+        if not hasattr(self, '_last_ocr_time'):
+            self._last_ocr_time = 0
+        if time.time() - self._last_ocr_time > 5.0:
+            self._last_ocr_time = time.time()
+            roi_file = os.path.join(os.path.dirname(__file__),
+                                    'AImaneuver', 'ocr_reader_roi.json')
+            if os.path.exists(roi_file):
+                saved = json.load(open(roi_file))
+                for r in saved:
+                    name = r[0]
+                    rx, ry, rw, rh = int(r[1]), int(r[2]), int(r[3]), int(r[4])
+                    roi = frame[ry:ry+rh, rx:rx+rw]
+                    if roi.size == 0: continue
+                    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                    big = cv2.resize(gray, (rw*6, rh*6), interpolation=cv2.INTER_CUBIC)
+                    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
+                    enhanced = clahe.apply(big)
+                    rt = self._ocr_en.readtext(enhanced, detail=1, allowlist="0123456789")
+                    if rt:
+                        v = rt[0][1].strip()
+                        if v.isdigit():
+                            val = int(v)
+                            if val > 200: val = int(str(val)[:2])
+                            if name == "Hunger": self.hunger_val = val
+                            elif name == "Thirst": self.thirst_val = val
+                            elif name == "Stamina": self.stamina_val = val
 
     def _detect_zombies(self, frame):
         """YOLO检测僵尸, 返回[(cx, cy, name, dist), ...]"""
@@ -882,8 +921,10 @@ class Navigator:
         print(f"[战斗] 空格脱战 → WP{wp_i+1} 跳过5点")
         self.last_waypoint_time = 0  # 清除等待状态
 
+    LOW_STAT_THRESHOLD = 15  # 饱食/口渴/耐力低于此值触发返航
+
     def _combat_logic(self, px, py):
-        """战斗状态机: 规则1补血 > 规则2脱战 > 战斗/巡逻"""
+        """战斗状态机: 规则1补血 > 规则2脱战 > 规则3低状态返航 > 战斗/巡逻"""
         # ---- 规则1: 全局补血 ----
         if self.hp_pct < self.HEAL_THRESHOLD and self.ctrl:
             if self.skills.is_ready(1):  # skill_2 补血
@@ -894,14 +935,35 @@ class Navigator:
             self._escape_to_waypoint(px, py)
             return
 
+        # ---- 规则3: 饱食/口渴/耐力过低 → 自动返航 ----
+        if (self.combat_state is None and not self._low_stat_triggered and
+                self.home and self.state == self.STATE_NAVIGATING):
+            low_stats = []
+            if self.hunger_val > 0 and self.hunger_val < self.LOW_STAT_THRESHOLD:
+                low_stats.append(f"Hunger={self.hunger_val}")
+            if self.thirst_val > 0 and self.thirst_val < self.LOW_STAT_THRESHOLD:
+                low_stats.append(f"Thirst={self.thirst_val}")
+            if self.stamina_val > 0 and self.stamina_val < self.LOW_STAT_THRESHOLD:
+                low_stats.append(f"Stamina={self.stamina_val}")
+            if low_stats:
+                print(f"[自动返航] 低状态: {', '.join(low_stats)} → 返航补给")
+                self._low_stat_triggered = True
+                self._post_supply_check = True
+                self.returning_home = True
+                self.goal = self.home
+                self.plan_path()
+                if self.state == self.STATE_READY:
+                    self.state = self.STATE_NAVIGATING
+                return
+
         # ---- 战斗状态 ----
         if self.combat_state is not None:
             return self._combat_step(px, py)
 
         # ---- 巡逻中抵达途径点: 判断是否进入战斗 ----
-        if self.last_waypoint_time > 0:  # 正在途径点等待
-            if self.skip_count > 0:  # 跳过模式: 不等直接走
-                self.last_waypoint_time = time.time() + 999  # 跳过等待
+        if self.last_waypoint_time > 0:
+            if self.skip_count > 0:
+                self.last_waypoint_time = time.time() + 999
             return
 
     def _combat_step(self, px, py):
@@ -1047,6 +1109,37 @@ class Navigator:
         # ★ 战斗逻辑 (规则1补血 > 规则2脱战 > 战斗/巡逻判定)
         if self.hp_pct > 0:
             self._combat_logic(px, py)
+
+        # ★ 补给后检查: 返航补给完成, 检查状态是否恢复
+        if self._post_supply_check and self.state != self.STATE_NAVIGATING:
+            self._post_supply_check = False
+            self._low_stat_triggered = False
+            still_low = []
+            if self.hunger_val > 0 and self.hunger_val < self.LOW_STAT_THRESHOLD:
+                still_low.append(f"Hunger={self.hunger_val}")
+            if self.thirst_val > 0 and self.thirst_val < self.LOW_STAT_THRESHOLD:
+                still_low.append(f"Thirst={self.thirst_val}")
+            if self.stamina_val > 0 and self.stamina_val < self.LOW_STAT_THRESHOLD:
+                still_low.append(f"Stamina={self.stamina_val}")
+            if still_low:
+                print(f"[停止] 补给后仍低: {', '.join(still_low)} → 停止程序")
+                self.status_msg = f"停止: 补给后仍低 {', '.join(still_low)}"
+                self.state = self.STATE_IDLE
+            elif (self.hunger_val >= 100 and self.thirst_val >= 100 and
+                  self.stamina_val > 0 and self.stamina_val >= 50):
+                print(f"[补给完成] 状态恢复 → 返回巡逻起点")
+                self.status_msg = "补给完成, 返回巡逻起点"
+                if self._patrol_start and self.waypoints:
+                    self.start = (px, py)
+                    self.goal = self.waypoints[0]
+                    self.wp_index = 0
+                    self.plan_path(to_goal_only=True)
+                    if self.state == self.STATE_READY:
+                        self.state = self.STATE_NAVIGATING
+                    self.returning_home = False
+            else:
+                print(f"[补给完成] 状态: H={self.hunger_val} T={self.thirst_val} S={self.stamina_val}")
+                self.status_msg = "补给完成"
 
         # ★ 战斗中: 完全跳过导航逻辑 (偏离/途径点/寻路)
         if self.combat_state is not None:
@@ -1411,6 +1504,9 @@ class Navigator:
         # Hunger / Thirst
         cv2.putText(canvas, f"H: {self.hunger_val}  T: {self.thirst_val}",
                    (sbx + 3, y), FONT, 0.3, (200, 200, 200), 1)
+        y += 14
+        cv2.putText(canvas, f"Sta: {self.stamina_val}", (sbx + 3, y),
+                   FONT, 0.3, (200, 200, 200), 1)
         y += 14
         # 玩家坐标
         if self.position:
