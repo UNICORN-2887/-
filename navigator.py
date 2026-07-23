@@ -91,6 +91,43 @@ def best_direction(dx, dy):
 
 
 # ============================================================
+class SkillCooldown:
+    """技能冷却管理器 — 4个技能(1/2/3/4键), 各自有冷却时间"""
+    def __init__(self):
+        self.cooldowns = [3.0, 5.0, 8.0, 12.0]  # a, b, c, d秒
+        self.last_used = [0.0, 0.0, 0.0, 0.0]
+        self.enabled = True
+
+    def use(self, idx, ctrl=None):
+        now = time.time()
+        if not self.is_ready(idx, now): return False
+        self.last_used[idx] = now
+        if ctrl:
+            vk = [ctrl.VK_1, ctrl.VK_2, ctrl.VK_3,
+                  getattr(ctrl, 'VK_4', ord('4'))][idx]
+            try:
+                ctrl.press(vk, 0.1)
+                print(f"[技能] skill_{idx+1} (冷却{self.cooldowns[idx]}s)")
+            except Exception as e:
+                print(f"[技能] 失败: {e}"); return False
+        return True
+
+    def is_ready(self, idx, now=None):
+        if now is None: now = time.time()
+        return (now - self.last_used[idx]) >= self.cooldowns[idx]
+
+    def remaining(self, idx, now=None):
+        if now is None: now = time.time()
+        return max(0, self.cooldowns[idx] - (now - self.last_used[idx]))
+
+    def all_ready(self, now=None):
+        return [i for i in range(4) if self.is_ready(i, now)]
+
+    def update(self, idx, val):
+        self.cooldowns[idx] = max(0.5, float(val))
+# ============================================================
+
+# ============================================================
 # A* 寻路
 # ============================================================
 def astar(grid, start, goal):
@@ -224,7 +261,8 @@ class Navigator:
         self.offset_x = 0
         self.offset_y = 0
         self.status_msg = "点击地图设定起点和终点"
-        self.supply_info = None  # 补给状态 {hunger, thirst, items, decision, round}
+        self.supply_info = None  # 补给状态
+        self.skills = SkillCooldown()  # 技能冷却
 
         # 中键拖拽
         self._dragging = False
@@ -779,6 +817,12 @@ class Navigator:
         else:
             pass  # 模拟模式
 
+        # 7. 技能自动释放 (冷却好了就放)
+        if self.ctrl and self.skills.enabled:
+            for idx in self.skills.all_ready():
+                self.skills.use(idx, self.ctrl)
+                break  # 每步最多放一个技能
+
         self.status_msg = (f"→ ({wx},{wy}) dir={di} "
                           f"Δ({dx:.0f},{dy:.0f}) {keys}")
 
@@ -925,6 +969,29 @@ class Navigator:
                            (0, 255, 0) if ch and it['name'] == ch['name'] else (150, 150, 150), 1)
                 y += 12
 
+        # ---- 技能冷却面板 ----
+        if self.skills:
+            sx_, sy_ = VW - 220, 5
+            now = time.time()
+            cv2.rectangle(canvas, (sx_, sy_), (sx_ + 215, sy_ + 90), (40, 40, 40), -1)
+            cv2.rectangle(canvas, (sx_, sy_), (sx_ + 215, sy_ + 90), (0, 200, 200), 1)
+            cv2.putText(canvas, "技能冷却", (sx_ + 3, sy_ + 16), FONT, 0.4, (0, 255, 255), 1)
+            for i in range(4):
+                cd = self.skills.cooldowns[i]
+                rem = self.skills.remaining(i, now)
+                ready = rem <= 0
+                col = (0, 255, 0) if ready else (255, 100, 100)
+                bar_w = int(100 * (1 - rem / cd)) if cd > 0 else 100
+                cv2.putText(canvas, f"skill_{i+1}:", (sx_ + 3, sy_ + 34 + i * 16),
+                           FONT, 0.3, (200, 200, 200), 1)
+                # 冷却条
+                bx2, by2 = sx_ + 55, sy_ + 37 + i * 16
+                cv2.rectangle(canvas, (bx2, by2 - 8), (bx2 + 100, by2), (60, 60, 60), -1)
+                if bar_w > 0:
+                    cv2.rectangle(canvas, (bx2, by2 - 8), (bx2 + bar_w, by2), col, -1)
+                txt2 = "READY" if ready else f"{rem:.1f}s"
+                cv2.putText(canvas, txt2, (bx2 + 105, by2 + 1), FONT, 0.28, col, 1)
+
         help_text = "左=起点 右=终点 Enter=导航 空格=暂停 H=返航 IJKL=平移 +/-=缩放 Q=退出"
         cv2.putText(canvas, help_text,
                    (5, VH - 6), FONT, 0.3, (180, 180, 180), 1)
@@ -984,7 +1051,7 @@ def main():
     print("\n=== 路径导航闭环 ===")
     print("左键=起点 | 右键=终点(A*规划)")
     print("Enter=开始导航 | 空格=暂停 | Esc=停止 | Q=退出")
-    print("H=返航 | IJKL=平移 | +/-=缩放\n")
+    print("H=返航 | 1/2/3/4=释放技能 | E=技能开关 | IJKL=平移 | +/-=缩放\n")
 
     cv2.namedWindow("Nav", cv2.WINDOW_NORMAL)
     cv2.setWindowProperty("Nav", cv2.WND_PROP_TOPMOST, 1)
@@ -1049,6 +1116,22 @@ def main():
                 if nav.plan_path():
                     nav.returning_home = True
                     print(f"[返航] → 火堆 {nav.home}")
+
+        # 1/2/3/4 = 手动释放技能 (测试)
+        elif key in (ord('1'), ord('2'), ord('3'), ord('4')):
+            idx = key - ord('1')
+            if nav.ctrl and nav.skills.enabled:
+                if nav.skills.use(idx, nav.ctrl):
+                    print(f"[技能] skill_{idx+1} 手动释放!")
+                else:
+                    rem = nav.skills.remaining(idx)
+                    print(f"[技能] skill_{idx+1} 冷却中 ({rem:.1f}s)")
+
+        # E = 切换技能开关
+        elif key in (ord('e'), ord('E')):
+            nav.skills.enabled = not nav.skills.enabled
+            state = "ON" if nav.skills.enabled else "OFF"
+            print(f"[技能] 自动释放: {state}")
 
         # Esc = 停止
         elif key == 27:
