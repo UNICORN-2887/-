@@ -249,9 +249,12 @@ class Navigator:
 
         self.start = None           # 起点 (原图坐标)
         self.goal = None            # 终点
-        self.path = None            # [(x,y)] 原图坐标
+        self.waypoints = []         # 中间途径点 [(x,y), ...]
+        self.path = None            # 当前段路径 [(x,y)]
         self.grid_path = None       # 网格坐标路径
-        self.current_waypoint = 0
+        self.current_waypoint = 0   # 当前段内途径点索引
+        self.wp_index = 0           # 当前在哪个途径点(段索引)
+        # 完整路线: start → waypoints[0] → waypoints[1] → ... → goal
 
         # 返航状态
         self.returning_home = False
@@ -291,43 +294,49 @@ class Navigator:
                 int(iy * self.scale + self.offset_y))
 
     # ----------------------------------------------------------
-    def plan_path(self):
+    def _plan_segment(self, seg_from, seg_to):
+        """规划一段 A* 路径"""
+        gs = self.to_grid(*seg_from)
+        gg = self.to_grid(*seg_to)
+        if self.grid[gs[1], gs[0]] == 0:
+            snap = self._snap_to_reachable(gs)
+            if snap is None: return None
+            gs = snap
+        if self.grid[gg[1], gg[0]] == 0:
+            snap = self._snap_to_reachable(gg)
+            if snap is None: return None
+            gg = snap
+        gp = astar(self.grid, gs, gg)
+        return [self.to_image(*p) for p in gp] if gp else None
+
+    def _plan_patrol(self):
+        """完整巡逻路线: start -> wp[0] -> wp[1] -> ... -> goal"""
         if self.start is None or self.goal is None:
             return False
-        gs = self.to_grid(*self.start)
-        gg = self.to_grid(*self.goal)
-
-        # 安全检查：起终点必须在可达区，否则找最近可达点
-        if self.grid[gs[1], gs[0]] == 0:
-            snapped = self._snap_to_reachable(gs)
-            if snapped is None:
-                print(f"[A*] 起点({self.start[0]},{self.start[1]})在不可达区，且附近无可达点!")
-                self.status_msg = "起点在不可达区"
+        points = [self.start] + self.waypoints + [self.goal]
+        all_segs = []
+        for i in range(len(points) - 1):
+            seg = self._plan_segment(points[i], points[i + 1])
+            if seg is None:
+                print(f"[巡逻] 段{i} 规划失败!")
                 return False
-            print(f"[A*] 起点不在可达区 → 吸附到 ({snapped[0]*self.DS},{snapped[1]*self.DS})")
-            gs = snapped
-            self.start = self.to_image(*snapped)
+            all_segs.append(seg)
+        full = []
+        for s in all_segs:
+            full.extend(s if not full else s[1:])
+        self.path = full
+        self.current_waypoint = 0
+        self.wp_index = 0
+        n = len(self.waypoints)
+        print(f"[巡逻] 起点 -> " + " -> ".join(
+            [f"WP{i+1}" for i in range(n)]) + f" -> 终点 ({len(full)}步)")
+        self.state = self.STATE_READY
+        return True
 
-        if self.grid[gg[1], gg[0]] == 0:
-            snapped = self._snap_to_reachable(gg)
-            if snapped is None:
-                print(f"[A*] 终点({self.goal[0]},{self.goal[1]})在不可达区，且附近无可达点!")
-                self.status_msg = "终点在不可达区"
-                return False
-            print(f"[A*] 终点不在可达区 → 吸附到 ({snapped[0]*self.DS},{snapped[1]*self.DS})")
-            gg = snapped
-            self.goal = self.to_image(*snapped)
-
-        print("[A*] 计算中...")
-        self.grid_path = astar(self.grid, gs, gg)
-        if self.grid_path:
-            self.path = [self.to_image(*p) for p in self.grid_path]
-            print(f"[A*] {len(self.path)} waypoints")
-            self.current_waypoint = 0
-            self.state = self.STATE_READY
-            return True
-        print("[A*] 无路径")
-        return False
+    def plan_path(self):
+        """兼容旧接口: 简单起点->终点"""
+        self.waypoints = []
+        return self._plan_patrol()
 
     # ----------------------------------------------------------
     def get_next_waypoint(self, px, py):
@@ -938,6 +947,13 @@ class Navigator:
             cv2.putText(canvas, "G", (gp[0] + 10, gp[1]),
                        FONT, 0.5, (0, 0, 255), 2)
 
+        # 途径点标记 (蓝色圆点 + 编号)
+        for i, wp in enumerate(self.waypoints):
+            wpp = self.img2scr(*wp)
+            cv2.circle(canvas, wpp, 5, (255, 150, 0), -1)
+            cv2.putText(canvas, str(i + 1), (wpp[0] + 8, wpp[1] + 4),
+                       FONT, 0.35, (255, 150, 0), 1)
+
         # 火堆标记
         if self.home:
             hp = self.img2scr(*self.home)
@@ -1052,15 +1068,24 @@ class Navigator:
     # ----------------------------------------------------------
     def on_mouse(self, event, sx, sy, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
-            self.start = self.scr2img(sx, sy)
-            self.status_msg = f"起点=({self.start[0]},{self.start[1]})"
-            print(self.status_msg)
+            pt = self.scr2img(sx, sy)
+            if self.start is None:
+                # 第一次左键 = 起点
+                self.start = pt
+                self.status_msg = f"起点=({pt[0]},{pt[1]})"
+                print(f"[起点] {pt}")
+            else:
+                # 后续左键 = 添加途径点
+                self.waypoints.append(pt)
+                i = len(self.waypoints)
+                self.status_msg = f"途径点#{i}=({pt[0]},{pt[1]})"
+                print(f"[途径点#{i}] {pt}")
         elif event == cv2.EVENT_RBUTTONDOWN:
             self.goal = self.scr2img(sx, sy)
             self.status_msg = f"终点=({self.goal[0]},{self.goal[1]})"
-            print(self.status_msg)
+            print(f"[终点] {self.goal}")
             if self.start:
-                self.plan_path()
+                self._plan_patrol()  # 改为多段规划
         elif event == cv2.EVENT_MBUTTONDOWN:
             self._dragging = True
             self._dsx, self._dsy = sx, sy
@@ -1212,13 +1237,15 @@ def main():
         elif key in (ord('r'), ord('R')):
             nav.start = None
             nav.goal = None
+            nav.waypoints = []
             nav.path = None
             nav.current_waypoint = 0
+            nav.wp_index = 0
             nav.last_waypoint_time = 0
             nav.state = nav.STATE_IDLE
             nav.returning_home = False
-            nav.status_msg = "已重置, 请重新设定起点和终点"
-            print("[重置] 起点/终点/路径已清除")
+            nav.status_msg = "已重置, 请重新设定起点/途径点/终点"
+            print("[重置] 起点/途径点/终点/路径已清除")
 
         # Esc = 停止
         elif key == 27:
