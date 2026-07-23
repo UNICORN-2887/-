@@ -951,6 +951,9 @@ class Navigator:
                 self._post_supply_check = True
                 self.returning_home = True
                 self.goal = self.home
+                self._saved_waypoints = list(self.waypoints)  # 保存途径点
+                self.waypoints = []  # 清途径点, 直接回家
+                self.wp_index = 0
                 self.plan_path()
                 if self.state == self.STATE_READY:
                     self.state = self.STATE_NAVIGATING
@@ -1129,6 +1132,9 @@ class Navigator:
                   self.stamina_val > 0 and self.stamina_val >= 50):
                 print(f"[补给完成] 状态恢复 → 返回巡逻起点")
                 self.status_msg = "补给完成, 返回巡逻起点"
+                # 恢复途径点 (自动返航时被清掉了)
+                if not self.waypoints and hasattr(self, '_saved_waypoints'):
+                    self.waypoints = self._saved_waypoints
                 if self._patrol_start and self.waypoints:
                     self.start = (px, py)
                     self.goal = self.waypoints[0]
