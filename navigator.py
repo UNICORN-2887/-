@@ -1026,6 +1026,10 @@ class Navigator:
         if self.hp_pct > 0:
             self._combat_logic(px, py)
 
+        # ★ 战斗中: 完全跳过导航逻辑 (偏离/途径点/寻路)
+        if self.combat_state is not None:
+            return
+
         # 2. 返航模式才触发火堆交互
         HOME_REACH = int(GOAL_REACH_THRESHOLD * 1.5)
         if self.returning_home and self.home:
