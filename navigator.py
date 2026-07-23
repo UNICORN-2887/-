@@ -1090,10 +1090,25 @@ class Navigator:
         self.current_waypoint = max(self.current_waypoint, wp_idx - 2)
         wx, wy = self.path[wp_idx]
 
-        # 0. 途径点等待中? 停止移动, 检查是否进入战斗
+        # 0. 途径点等待中? 3次检测(0s/0.5s/1.0s)
         if self.last_waypoint_time > 0:
-            # 等待期间检测到僵尸且符合条件 → 立刻进入战斗
-            if self.combat_state is None and self.skip_count == 0:
+            elapsed = time.time() - self.last_waypoint_time
+            check_points = [0, 0.5, 1.0]
+            # 确定当前检测轮次
+            check_idx = 0
+            for cp in check_points:
+                if elapsed >= cp:
+                    check_idx = check_points.index(cp) + 1
+            # 每次检测点: 查僵尸
+            if self.combat_state is None and self.skip_count == 0 and check_idx > 0:
+                # 在检测点做一次强制重新检测
+                if hasattr(self, '_last_check_idx') and self._last_check_idx != check_idx:
+                    if self.tracker and self.tracker.cap:
+                        ret, sf = self.tracker.cap.read()
+                        if ret:
+                            self._detect_zombies(sf)
+                            self._last_frame = sf
+                self._last_check_idx = check_idx
                 zombies_near = [z for z in self.zombie_list if z[3] < self.ZOMBIE_THRESHOLD]
                 if (self.hp_pct >= self.COMBAT_ENTRY_HP and
                         len(zombies_near) < self.COMBAT_ENTRY_MAX_ZOMBIES and
@@ -1103,13 +1118,18 @@ class Navigator:
                     self.chase_start_time = time.time()
                     self.waypoint_combat_start = time.time()
                     self.last_waypoint_time = 0
-                    print(f"[战斗] 途径点检测到僵尸, 进入战斗! HP={self.hp_pct}% n={len(zombies_near)}")
+                    self._last_check_idx = 0
+                    print(f"[战斗] 检测#{check_idx} 发现僵尸, 进入战斗! HP={self.hp_pct}% n={len(zombies_near)}")
                     self.status_msg = "战斗: 追击中"
                     return
-            if time.time() - self.last_waypoint_time < 1.0:
-                self.status_msg = f"途径点等待 {time.time()-self.last_waypoint_time:.1f}s/1s"
+                # 打印检测结果
+                if check_idx <= 3:
+                    self.status_msg = f"WP检测#{check_idx}/3: 僵尸={len(self.zombie_list)}只"
+            if elapsed < 1.0:
                 return
-            # 时间到, 切下一段
+            # 3次都没检测到, 切下一段
+            self._last_check_idx = 0
+            print(f"[巡逻] 3次检测无僵尸, 继续巡逻")
             self.last_waypoint_time = 0
             self.wp_index += 1
             if self.wp_index < len(self.waypoints):
