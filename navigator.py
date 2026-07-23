@@ -269,6 +269,7 @@ class Navigator:
         self.yolo_disp = None       # YOLO检测画面 (缩小后)
         self.zombie_counts = {}     # 僵尸种类→数量
         self.last_waypoint_time = 0 # 到达途径点的时间戳
+        self.loop_patrol = False    # 循环巡逻模式
 
         # 中键拖拽
         self._dragging = False
@@ -331,7 +332,10 @@ class Navigator:
         """初始化巡逻: 验证可达, 规划第一段"""
         if self.start is None:
             return False
-        if not self.waypoints and self.goal is None:
+        if not self.waypoints and not self.loop_patrol and self.goal is None:
+            return False
+        if self.loop_patrol and not self.waypoints:
+            print("[巡逻] 循环模式需要至少1个途径点")
             return False
         self.wp_index = 0
         if not self._plan_next_segment():
@@ -339,10 +343,16 @@ class Navigator:
         n = len(self.waypoints)
         if n:
             wps = " -> ".join([f"WP{i+1}" for i in range(n)])
-            print(f"[巡逻] 路线: 起点 -> {wps}" +
-                  (f" -> 终点" if self.goal else " (循环)"))
-        else:
+            if self.loop_patrol:
+                print(f"[巡逻] 循环: 起点 -> {wps} -> WP1(循环)")
+            elif self.goal:
+                print(f"[巡逻] 路线: 起点 -> {wps} -> 终点")
+            else:
+                print(f"[巡逻] 路线: 起点 -> {wps}")
+        elif self.goal:
             print(f"[巡逻] 路线: 起点 -> 终点")
+        else:
+            print(f"[巡逻] 起点单点")
         self.state = self.STATE_READY
         return True
 
@@ -765,22 +775,22 @@ class Navigator:
                 self._fire_camp_interact()
                 return
 
-        # 3. 检查是否到达终点
-        gx, gy = self.goal
-        d_goal = np.hypot(px - gx, py - gy)
-        if d_goal < GOAL_REACH_THRESHOLD:
-            # 终点离火堆近? 也触发火堆交互
-            if self.home and np.hypot(gx - self.home[0], gy - self.home[1]) < HOME_REACH:
-                print(f"\n{'='*40}\n[到达终点] 终点距火堆近, 触发火堆交互\n{'='*40}")
+        # 3. 检查是否到达终点 (有goal时才检查)
+        if self.goal:
+            gx, gy = self.goal
+            d_goal = np.hypot(px - gx, py - gy)
+            if d_goal < GOAL_REACH_THRESHOLD:
+                if self.home and np.hypot(gx - self.home[0], gy - self.home[1]) < HOME_REACH:
+                    print(f"\n{'='*40}\n[到达终点] 终点距火堆近, 触发火堆交互\n{'='*40}")
+                    self.state = self.STATE_IDLE
+                    self.returning_home = False
+                    self._fire_camp_interact()
+                    return
+                print(f"[!] 到达终点! (距目标{d_goal:.0f}px)")
                 self.state = self.STATE_IDLE
+                self.status_msg = "已到达终点"
                 self.returning_home = False
-                self._fire_camp_interact()
                 return
-            print(f"[!] 到达终点! (距目标{d_goal:.0f}px)")
-            self.state = self.STATE_IDLE
-            self.status_msg = "已到达终点"
-            self.returning_home = False
-            return
 
         # 4. 检查偏离
         if self.check_deviation(px, py):
@@ -823,10 +833,15 @@ class Navigator:
                 # 切到下一个目标
                 if self.wp_index < len(self.waypoints):
                     self.wp_index += 1
-                    # 如果是循环(无终点)且走完所有途径点: 回到WP0
-                    if self.goal is None and self.wp_index >= len(self.waypoints):
+                    # 循环模式: 走完所有途径点回到WP0
+                    if self.loop_patrol and self.wp_index >= len(self.waypoints):
                         self.wp_index = 0
                         print("[巡逻] 循环: 回到WP1")
+                    self._plan_next_segment()
+                elif self.loop_patrol:
+                    # 循环模式 + 只有途径点
+                    self.wp_index = 0
+                    print("[巡逻] 循环: 回到WP1")
                     self._plan_next_segment()
                 else:
                     # 到达终点
@@ -1180,7 +1195,7 @@ def main():
     print("\n=== 路径导航闭环 ===")
     print("左键=起点 | 右键=终点(A*规划)")
     print("Enter=开始导航 | 空格=暂停 | Esc=停止 | Q=退出")
-    print("H=返航 | R=重置 | 1/2/3/4=释放技能 | E=技能开关 | IJKL=平移 | +/-=缩放\n")
+    print("H=返航 | L=循环巡逻 | R=重置 | 1-4=技能 | E=技能开关 | IJKL=平移 | +/-=缩放\n")
 
     cv2.namedWindow("Nav", cv2.WINDOW_NORMAL)
     cv2.setWindowProperty("Nav", cv2.WND_PROP_TOPMOST, 1)
@@ -1257,6 +1272,15 @@ def main():
                 else:
                     rem = nav.skills.remaining(idx)
                     print(f"[技能] skill_{idx+1} 冷却中 ({rem:.1f}s)")
+
+        # L = 切换循环巡逻
+        elif key in (ord('l'), ord('L')):
+            nav.loop_patrol = not nav.loop_patrol
+            nav.goal = None  # 循环模式不需要终点
+            state = "ON" if nav.loop_patrol else "OFF"
+            print(f"[巡逻] 循环模式: {state}")
+            if nav.loop_patrol and nav.start and nav.waypoints:
+                nav._plan_patrol()
 
         # E = 切换技能开关
         elif key in (ord('e'), ord('E')):
