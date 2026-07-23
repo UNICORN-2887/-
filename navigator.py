@@ -700,9 +700,50 @@ class Navigator:
         time.sleep(0.05)
         _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
         self.status_msg = "补给完成, 已离开火堆"
-        self.supply_info = None  # 清除补给面板
+        self.supply_info = None
         print(f"[补给] 点击离开 ({lx},{ly})")
         print("=" * 40 + "\n  ✅ 补给完成!\n" + "=" * 40)
+
+        # ★ 自动返航补给后检查
+        if self._post_supply_check:
+            self._post_supply_check = False
+            self._low_stat_triggered = False
+            # 重新读取状态
+            for _ in range(3):
+                ret, sf = self.tracker.cap.read() if self.tracker else (False, None)
+                if ret: self._read_status_values(sf); time.sleep(0.3)
+            still_low = []
+            if self.hunger_val > 0 and self.hunger_val < self.LOW_STAT_THRESHOLD:
+                still_low.append(f"Hunger={self.hunger_val}")
+            if self.thirst_val > 0 and self.thirst_val < self.LOW_STAT_THRESHOLD:
+                still_low.append(f"Thirst={self.thirst_val}")
+            if self.stamina_val > 0 and self.stamina_val < self.LOW_STAT_THRESHOLD:
+                still_low.append(f"Stamina={self.stamina_val}")
+            if still_low:
+                print(f"\n{'='*60}")
+                print(f"  !! 补给后状态仍不足, 程序终止 !!")
+                print(f"  {', '.join(still_low)}")
+                print(f"  请手动补充后重新运行")
+                print(f"{'='*60}\n")
+                self.status_msg = f"!! STOP: 补给不足 {', '.join(still_low)}"
+                self.state = self.STATE_IDLE
+                self.loop_patrol = False
+            elif (self.hunger_val >= 100 and self.thirst_val >= 100 and
+                  self.stamina_val > 0 and self.stamina_val >= 50):
+                print(f"[补给完成] 状态恢复 → 返回巡逻起点")
+                self.status_msg = "补给完成, 返回巡逻起点"
+                if not self.waypoints and hasattr(self, '_saved_waypoints'):
+                    self.waypoints = list(self._saved_waypoints)
+                if self._patrol_start and self.waypoints:
+                    self.start = None  # 让plan_path用当前位置
+                    self.goal = self.waypoints[0]
+                    self.wp_index = 0
+                    self.plan_path()
+                    self.state = self.STATE_READY
+                    self.returning_home = False
+            else:
+                print(f"[补给完成] 状态: H={self.hunger_val} T={self.thirst_val} S={self.stamina_val}")
+                self.status_msg = "补给完成"
 
     # ----------------------------------------------------------
     @staticmethod
