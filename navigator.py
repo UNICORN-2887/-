@@ -553,8 +553,12 @@ class Navigator:
                 enhanced = clahe.apply(big)
                 r = ocr_en.readtext(enhanced, detail=1, allowlist="0123456789")
                 if r:
-                    v = r[0][1].strip()
-                    if v.isdigit(): vals[name] = int(v)
+                    # 拼接所有数字 + 约束到200
+                    v = "".join([x[1].strip() for x in r if x[1].strip().isdigit()])
+                    if v.isdigit():
+                        val = int(v)
+                        if val > 200: val = int(str(val)[:2])
+                        vals[name] = val
             return vals.get("Hunger"), vals.get("Thirst")
 
         def drag_and_ocr(sx, sy, drag_start_y):
