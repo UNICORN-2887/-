@@ -2256,7 +2256,7 @@ def main():
                     val = round(val, 1)
                 cfg_values[name] = max(vmin, min(vmax, val))
 
-    cv2.setMouseCallback("Config", cfg_on_mouse)
+    # Config window removed - use web panel at http://127.0.0.1:5050
 
     # 定义滑块: name, y, min, max, bar_x, bar_w
     cfg_sliders = []
