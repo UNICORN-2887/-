@@ -719,12 +719,20 @@ class Navigator:
         if self._post_supply_check:
             self._post_supply_check = False
             self._low_stat_triggered = False
-            # 等待游戏UI切换回正常HUD, 再读状态
+            # 等待UI切换 + drain OBS缓冲 (防止读到火堆界面旧帧)
             print("[补给] 等待UI切换...")
-            time.sleep(2.0)
-            for _ in range(3):
-                ret, sf = self.tracker.cap.read() if self.tracker else (False, None)
-                if ret: self._read_status_values(sf); time.sleep(0.3)
+            deadline = time.time() + 3.0
+            while time.time() < deadline:
+                if self.tracker and self.tracker.cap:
+                    self.tracker.cap.grab()
+                cv2.waitKey(1)
+            for _ in range(5):
+                if self.tracker and self.tracker.cap:
+                    self.tracker.cap.grab(); cv2.waitKey(1)
+                self.tracker.cap.retrieve()
+            # 现在读到的才是正常HUD
+            ret, sf = self.tracker.cap.read() if self.tracker else (False, None)
+            if ret: self._read_status_values(sf)
             still_low = []
             if self.hunger_val > 0 and self.hunger_val < self.LOW_STAT_THRESHOLD:
                 still_low.append(f"Hunger={self.hunger_val}")
