@@ -282,6 +282,9 @@ class Navigator:
         self.chase_start_time = 0    # 当前目标开始追击时间
         self.waypoint_combat_start = 0  # 途径点战斗开始时间
         self.zombie_list = []        # [(cx, cy, name), ...] 画面中僵尸列表
+        self._last_weapon_check = 0  # 上次武器检测时间
+        self._weapon_empty = False   # 武器是否耗尽
+        self._weapon_stop = False    # 武器耗尽→停止程序
         self.hp_pct = 100            # 血量百分比
         self.hunger_val = 0          # 饱食度
         self.thirst_val = 0          # 口渴度
@@ -1041,6 +1044,43 @@ class Navigator:
         self.last_waypoint_time = 0
         print(f"[战斗] 强制脱战 → WP{wp_i+1}")
 
+    def _check_weapon(self):
+        """检测武器是否耗尽 — 整理背包→颜色匹配第一格"""
+        if not self._game_hwnd or not self.tracker: return
+        now = time.time()
+        if now - self._last_weapon_check < self.WEAPON_CHECK_INTERVAL: return
+        self._last_weapon_check = now
+
+        # 点击整理背包
+        cp_file = os.path.join(os.path.dirname(__file__),
+                               'AImaneuver', 'click_points.json')
+        if os.path.exists(cp_file):
+            pts = json.load(open(cp_file))
+            org = pts.get("organize_bag", {"x": 1480, "y": 857})
+            lp = _wa.MAKELONG(org["x"], org["y"])
+            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp)
+            time.sleep(0.02)
+            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
+        time.sleep(0.3)
+
+        # drain + 读帧
+        for _ in range(5): self.tracker.cap.grab(); cv2.waitKey(1)
+        ret, f = self.tracker.cap.read()
+        if not ret: return
+
+        rx, ry, rw, rh = [max(1, int(v)) for v in self.WEAPON_ROI]
+        roi = f[ry:ry+rh, rx:rx+rw]
+        if roi.size == 0: return
+
+        bgr_ref = np.array(self.WEAPON_EMPTY_RGB[::-1])
+        diff = np.abs(roi.astype(np.int16) - bgr_ref.astype(np.int16))
+        dist = np.sqrt(np.sum(diff ** 2, axis=2))
+        match_ratio = np.count_nonzero(dist < self.WEAPON_TOLERANCE) / dist.size
+
+        if match_ratio > self.WEAPON_EMPTY_THRESHOLD:
+            self._weapon_empty = True
+            print(f"[武器] 检测到空槽! match={match_ratio:.1%}")
+
     def _escape_to_waypoint(self, px, py):
         """脱战: 空格 → A*回最近途径点 → 跳过模式下5个点"""
         if self.ctrl:
@@ -1061,7 +1101,13 @@ class Navigator:
         print(f"[战斗] 空格脱战 → WP{wp_i+1} 跳过5点")
         self.last_waypoint_time = 0  # 清除等待状态
 
-    LOW_STAT_THRESHOLD = 15   # 饱食/口渴/耐力低于此值触发返航 (U/J调节)
+    LOW_STAT_THRESHOLD = 15   # 饱食/口渴/耐力低于此值触发返航 (O/P调节)
+    # 武器检测
+    WEAPON_CHECK_INTERVAL = 15  # 武器检测间隔(秒)
+    WEAPON_ROI = [1300, 838, 30, 30]  # 武器第一格区域
+    WEAPON_EMPTY_RGB = (80, 39, 19)   # 空槽参考色
+    WEAPON_TOLERANCE = 20             # 色差容差
+    WEAPON_EMPTY_THRESHOLD = 0.3      # 空槽判定阈值
 
     def _combat_logic(self, px, py):
         """战斗状态机: 规则1补血 > 规则2脱战 > 规则3低状态返航 > 战斗/巡逻"""
@@ -1074,6 +1120,20 @@ class Navigator:
         if self.hp_pct < self.ESCAPE_THRESHOLD and self.combat_state is None:
             self._escape_to_waypoint(px, py)
             return
+
+        # ---- 规则0: 武器检测 (和补血同优先级) ----
+        if self.state == self.STATE_NAVIGATING and not self._weapon_stop:
+            self._check_weapon()
+            if self._weapon_empty and not self._weapon_stop:
+                print(f"\n[武器] 耗尽! 返航 → 停止")
+                self._weapon_stop = True
+                self.returning_home = True
+                self.goal = self.home
+                self.waypoints = []
+                self.plan_path()
+                if self.state == self.STATE_READY:
+                    self.state = self.STATE_NAVIGATING
+                return
 
         # ---- 规则3: 饱食/口渴/耐力过低 → 自动返航 ----
         if (self.combat_state is None and not self._low_stat_triggered and
@@ -1307,6 +1367,17 @@ class Navigator:
         # 2. 返航模式触发火堆交互 (H键或自动返航)
         HOME_REACH = int(GOAL_REACH_THRESHOLD * 1.5)
         if self.returning_home and self.home:
+            # 武器耗尽返航: 到火堆直接停止, 不补给
+            if self._weapon_stop:
+                print(f"\n{'='*60}")
+                print(f"  !! 武器耗尽, 程序终止 !!")
+                print(f"  请更换武器后重新运行")
+                print(f"{'='*60}\n")
+                self.status_msg = "!! STOP: 武器耗尽"
+                self.state = self.STATE_IDLE
+                self.loop_patrol = False
+                self.returning_home = False
+                return
             hx, hy = self.home
             d_home = np.hypot(px - hx, py - hy)
             if d_home < HOME_REACH:
@@ -2126,6 +2197,30 @@ def main():
             nav.combat_state = None
             nav.status_msg = "Reset, 请重新设定起点/途径点/终点"
             print("[重置] 起点/waypoints/goal/path cleared")
+
+        # W = 手动武器检测 (不自动整理背包)
+        elif key in (ord('w'), ord('W')):
+            print("[武器] 手动检测...")
+            nav._last_weapon_check = 0  # 强制检测
+            # 不点整理, 直接用当前画面检测
+            if nav.tracker and nav.tracker.cap:
+                for _ in range(3): nav.tracker.cap.grab(); cv2.waitKey(1)
+                ret, wf = nav.tracker.cap.read()
+                if ret:
+                    rxw, ryw, rww, rhw = [max(1, int(v)) for v in nav.WEAPON_ROI]
+                    ryw = min(ryw, wf.shape[0]-2)
+                    rxw = min(rxw, wf.shape[1]-2)
+                    rww = min(rww, wf.shape[1]-rxw)
+                    rhw = min(rhw, wf.shape[0]-ryw)
+                    roi_w = wf[ryw:ryw+rhw, rxw:rxw+rww]
+                    if roi_w.size > 0:
+                        bgr_ref = np.array(nav.WEAPON_EMPTY_RGB[::-1])
+                        diff_w = np.abs(roi_w.astype(np.int16) - bgr_ref.astype(np.int16))
+                        dist_w = np.sqrt(np.sum(diff_w ** 2, axis=2))
+                        ratio_w = np.count_nonzero(dist_w < nav.WEAPON_TOLERANCE) / dist_w.size
+                        empty_w = ratio_w > nav.WEAPON_EMPTY_THRESHOLD
+                        tag = "EMPTY!" if empty_w else "HAS WEAPON"
+                        print(f"[武器] 手动检测: {tag} match={ratio_w:.1%}")
 
         # O/P = 快速调整返航阈值
         elif key in (ord('o'), ord('O')):
