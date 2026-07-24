@@ -2062,6 +2062,69 @@ class Navigator:
         return canvas
 
     # ----------------------------------------------------------
+    def render_config(self):
+        """渲染第三窗口: 超参数配置面板"""
+        CW, CH = 500, 600
+        canvas = np.zeros((CH, CW, 3), dtype=np.uint8)
+        FONT = cv2.FONT_HERSHEY_SIMPLEX
+        y = 15
+
+        cv2.putText(canvas, "Config Panel", (5, y), FONT, 0.5, (0, 255, 0), 1)
+        y += 5
+        cv2.putText(canvas, "F=console input  O/P=return thr", (5, y),
+                   FONT, 0.3, (150, 150, 150), 1)
+        y += 20
+
+        sections = [
+            ("-- Navigation --", [
+                ("WP Reach", WAYPOINT_REACH_THRESHOLD, "px, waypoint arrival dist"),
+                ("Deviation", PATH_DEVIATION_THRESHOLD, "px, replan when off path"),
+                ("Move Dur", MOVE_DURATION, "s, key press duration"),
+                ("Goal Reach", GOAL_REACH_THRESHOLD, "px, goal arrival dist"),
+                ("Lookahead", LOOKAHEAD_DIST, "px, forward waypoint dist"),
+            ]),
+            ("-- Combat --", [
+                ("Zombie Rng", self.ZOMBIE_THRESHOLD, "px, combat search radius"),
+                ("Attack Rng", self.ATTACK_RANGE, "px, attack range"),
+                ("Chase s", int(self.CHASE_TIMEOUT), "s, chase timeout"),
+                ("Combat HP", self.COMBAT_ENTRY_HP, "%, min HP to enter combat"),
+            ]),
+            ("-- Status --", [
+                ("Low Stat", int(self.LOW_STAT_THRESHOLD), "H/T/S below=return"),
+                ("Heal HP", self.HEAL_THRESHOLD, "%, HP below=use skill_2"),
+                ("Escape HP", self.ESCAPE_THRESHOLD, "%, HP below=escape"),
+            ]),
+            ("-- Skills --", [
+                ("Skill 1 CD", self.skills.cooldowns[0], "s, combat skill"),
+                ("Skill 2 CD", self.skills.cooldowns[1], "s, HEAL skill (slot 2!)"),
+                ("Skill 3 CD", self.skills.cooldowns[2], "s, combat skill"),
+                ("Skill 4 CD", self.skills.cooldowns[3], "s, combat skill"),
+            ]),
+            ("-- Weapon --", [
+                ("Weap ROI", f"({self.WEAPON_ROI[0]},{self.WEAPON_ROI[1]})", "weapon slot pos"),
+                ("Weap Tol", self.WEAPON_TOLERANCE, "color tolerance"),
+                ("Weap Thr", self.WEAPON_EMPTY_THRESHOLD, "empty threshold"),
+            ]),
+            ("-- Requirements --", [
+                ("Skill 2", "HEAL", "Must be healing skill"),
+                ("Cooldowns", "game CD+2s", "Set longer than real CD"),
+                ("Max Food", "8 items", ">8 may fail OCR"),
+            ]),
+        ]
+
+        for title, items in sections:
+            cv2.putText(canvas, title, (5, y), FONT, 0.4, (0, 255, 255), 1)
+            y += 18
+            for name, val, desc in items:
+                cv2.putText(canvas, f"  {name}: {val}", (10, y),
+                           FONT, 0.3, (200, 200, 200), 1)
+                cv2.putText(canvas, desc, (250, y), FONT, 0.25, (120, 120, 120), 1)
+                y += 15
+            y += 5
+
+        return canvas
+
+    # ----------------------------------------------------------
     def on_mouse(self, event, sx, sy, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
             pt = self.scr2img(sx, sy)
@@ -2159,6 +2222,9 @@ def main():
     cv2.namedWindow("Status", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Status", 960, 540)
 
+    cv2.namedWindow("Config", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Config", 500, 600)
+
     last_nav = 0
     print("[定位] 请在地图上点击你的当前位置作为起点...")
 
@@ -2174,6 +2240,8 @@ def main():
                 nav._last_frame = sf
         status_canvas = nav.render_status()
         cv2.imshow("Status", status_canvas)
+        config_canvas = nav.render_config()
+        cv2.imshow("Config", config_canvas)
         key = cv2.waitKey(30) & 0xFF
 
         if key == ord('q') or key == ord('Q'):
