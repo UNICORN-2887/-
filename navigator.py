@@ -739,7 +739,7 @@ class Navigator:
                 _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp2)
                 time.sleep(3.0)
                 # 重新进入火堆 (YOLO检测 + 点击)
-                for attempt2 in range(5):
+                for attempt2 in range(8):  # 和进火堆一样8次
                     ret2, f2 = cap.read()
                     if not ret2: continue
                     det2 = self.yolo(f2, verbose=False, conf=0.3)[0]
