@@ -622,9 +622,10 @@ class Navigator:
 
         # ===== 主循环 =====
         round_num = 0
+        eat_count = 0  # 连续食用计数(3次后强制重进火堆)
         while True:
             round_num += 1
-            print(f"\n[补给] === 第{round_num}轮 ===")
+            print(f"\n[补给] === 第{round_num}轮 (已吃{eat_count}/3) ===")
 
             # 终止条件 (用虚拟值)
             if virt_hunger > 100 and virt_thirst > 100:
@@ -700,7 +701,59 @@ class Navigator:
             virt_thirst += choice['water']
             consumed_food_total += choice['food']
             consumed_water_total += choice['water']
+            eat_count += 1
             time.sleep(8.0)
+
+            # 每3次食用后强制离开火堆再进入(防使用限制)
+            if eat_count >= 3:
+                import random
+                # 加载点击偏移
+                offset_file2 = os.path.join(base_dir, 'AImaneuver', 'click_offset.json')
+                dx2, dy2 = 0, 0
+                if os.path.exists(offset_file2):
+                    off2 = json.load(open(offset_file2))
+                    dx2, dy2 = off2.get('dx', 0), off2.get('dy', 0)
+                print("\n[补给] 已吃3次, 离开火堆再进入...")
+                # 点离开
+                lx2, ly2 = LEAVE["x"], LEAVE["y"]
+                lp2 = _wa.MAKELONG(lx2, ly2)
+                _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp2)
+                time.sleep(0.05)
+                _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp2)
+                time.sleep(3.0)
+                # 重新进入火堆 (YOLO检测 + 点击)
+                for attempt2 in range(5):
+                    ret2, f2 = cap.read()
+                    if not ret2: continue
+                    det2 = self.yolo(f2, verbose=False, conf=0.3)[0]
+                    best_cx2, best_cy2 = None, None
+                    for b2 in det2.boxes:
+                        if self.yolo.names[int(b2.cls[0])].lower() == 'campfire':
+                            x1b, y1b, x2b, y2b = map(int, b2.xyxy[0])
+                            best_cx2 = (x1b + x2b) // 2
+                            best_cy2 = (y1b + y2b) // 2
+                            break
+                    if best_cx2 is None: continue
+                    for _ in range(3):
+                        rx2 = best_cx2 + dx2 + random.randint(-80, 80)
+                        ry2 = best_cy2 + dy2 + random.randint(-80, 80)
+                        lp3 = _wa.MAKELONG(rx2, ry2)
+                        _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp3)
+                        time.sleep(0.05)
+                        _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp3)
+                        time.sleep(1.5)
+                        if self._confirm_open():
+                            print("[补给] 重新进入火堆成功!")
+                            eat_count = 0
+                            # 重新读初始状态
+                            h2, t2 = read_hunger_thirst()
+                            if h2: virt_hunger = h2
+                            if t2: virt_thirst = t2
+                            break
+                    if eat_count == 0: break
+                if eat_count > 0:
+                    print("[补给] 重进火堆失败, 离开")
+                    break
 
         # 6. 离开
         lx, ly = LEAVE["x"], LEAVE["y"]
