@@ -739,20 +739,26 @@ class Navigator:
                 _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp2)
                 time.sleep(3.0)
                 # 重新进入火堆 (YOLO检测 + 点击)
-                for attempt2 in range(5):  # 最多5次
-                    # drain OBS再YOLO
-                    for _ in range(5): cap.grab(); cv2.waitKey(1)
-                    ret2, f2 = cap.read()
-                    if not ret2: continue
-                    det2 = self.yolo(f2, verbose=False, conf=0.3)[0]
+                for attempt2 in range(5):
+                    # drain OBS + 读3帧找火堆
+                    for _ in range(10): cap.grab(); cv2.waitKey(1)
                     best_cx2, best_cy2 = None, None
-                    for b2 in det2.boxes:
-                        if self.yolo.names[int(b2.cls[0])].lower() == 'campfire':
-                            x1b, y1b, x2b, y2b = map(int, b2.xyxy[0])
-                            best_cx2 = (x1b + x2b) // 2
-                            best_cy2 = (y1b + y2b) // 2
-                            break
-                    if best_cx2 is None: continue
+                    for _ in range(3):  # 试3帧
+                        ret2, f2 = cap.read()
+                        if not ret2: continue
+                        det2 = self.yolo(f2, verbose=False, conf=0.3)[0]
+                        for b2 in det2.boxes:
+                            if self.yolo.names[int(b2.cls[0])].lower() == 'campfire':
+                                x1b, y1b, x2b, y2b = map(int, b2.xyxy[0])
+                                best_cx2 = (x1b + x2b) // 2
+                                best_cy2 = (y1b + y2b) // 2
+                                break
+                        if best_cx2: break
+                        time.sleep(0.3)
+                    if best_cx2 is None:
+                        print(f"[补给] 重进#{attempt2+1}: 未检测到火堆")
+                        time.sleep(1.0)
+                        continue
                     # 每次YOLO只点1次, 等2s检测, 避免连点误触离开
                     for _ in range(1):
                         # 先移开鼠标, 避免点到火堆UI
