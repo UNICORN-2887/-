@@ -563,8 +563,8 @@ class Navigator:
 
         def drag_and_ocr(sx, sy, drag_start_y):
             """垂直拖拽 + OBS drain + OCR (验证通过的方案)"""
-            # 扫描间清缓冲
-            deadline = time.time() + 0.3
+            # 扫描间清缓冲 (1秒, 仿supply_step_test主循环效果)
+            deadline = time.time() + 1.0
             while time.time() < deadline:
                 cap.grab(); cv2.waitKey(1)
             cap.retrieve()
