@@ -2222,23 +2222,70 @@ def main():
     cv2.namedWindow("Status", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Status", 960, 540)
 
-    # === Config Trackbar Window ===
+    # === Config Window (Canvas-based sliders) ===
     cv2.namedWindow("Config", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("Config", 400, 350)
-    tb_names = [
-        "WP Reach", "Deviation", "Move Dur(x10)", "Goal Reach", "Lookahead",
-        "Zombie Rng", "Attack Rng", "Chase s", "Low Stat"
+    cv2.resizeWindow("Config", 500, 620)
+    cfg_mouse = {"dragging": False, "idx": -1}
+
+    def cfg_on_mouse(event, sx, sy, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            for i, (_, ypos, _, _, _) in enumerate(cfg_sliders):
+                if ypos - 5 <= sy <= ypos + 15:
+                    cfg_mouse["dragging"] = True
+                    cfg_mouse["idx"] = i
+                    break
+        elif event == cv2.EVENT_LBUTTONUP:
+            cfg_mouse["dragging"] = False
+            cfg_mouse["idx"] = -1
+        elif event == cv2.EVENT_MOUSEMOVE and cfg_mouse["dragging"]:
+            i = cfg_mouse["idx"]
+            if 0 <= i < len(cfg_sliders):
+                name, ypos, vmin, vmax, bar_x, bar_w = cfg_sliders[i]
+                pct = max(0, min(1, (sx - bar_x) / bar_w))
+                val = vmin + pct * (vmax - vmin)
+                # 整数参数
+                if name not in ("Move Dur",):
+                    val = int(val)
+                else:
+                    val = round(val, 1)
+                cfg_values[name] = max(vmin, min(vmax, val))
+
+    cv2.setMouseCallback("Config", cfg_on_mouse)
+
+    # 定义滑块: name, y, min, max, bar_x, bar_w
+    cfg_sliders = []
+    cfg_values = {}
+    sections = [
+        ("NAVIGATION", [
+            ("WP Reach(px)", 25, 5, 200, "waypoint arrival dist"),
+            ("Deviation(px)", 100, 10, 300, "replan when off path"),
+            ("Move Dur(s)", 0.5, 0.05, 3.0, "key press duration"),
+            ("Goal Reach(px)", 100, 10, 300, "goal arrival dist"),
+            ("Lookahead(px)", 90, 10, 300, "forward lookahead dist"),
+        ]),
+        ("COMBAT", [
+            ("Zombie Rng(px)", 600, 100, 2000, "combat search radius"),
+            ("Attack Rng(px)", 130, 20, 500, "attack range"),
+            ("Chase Time(s)", 7, 1, 30, "chase timeout per target"),
+            ("Combat Entry HP%", 70, 20, 100, "min HP to enter combat"),
+            ("Max Zombies", 6, 1, 20, "max zombies to enter combat"),
+        ]),
+        ("STATUS", [
+            ("Low Stat Thr", 15, 1, 100, "H/T/S below=return supply"),
+            ("Heal HP%", 80, 20, 100, "HP below=use skill_2"),
+            ("Escape HP%", 20, 5, 50, "HP below=escape dash"),
+            ("Return Thr", 15, 1, 100, "same as Low Stat (O/P key)"),
+        ]),
+        ("WEAPON", [
+            ("W Tol", 20, 5, 100, "color tolerance"),
+            ("W Thr", 0.3, 0.05, 0.9, "empty threshold"),
+            ("W Check(s)", 15, 5, 60, "weapon check interval"),
+        ]),
     ]
-    tb_init = [
-        WAYPOINT_REACH_THRESHOLD, PATH_DEVIATION_THRESHOLD,
-        int(MOVE_DURATION * 10), GOAL_REACH_THRESHOLD, LOOKAHEAD_DIST,
-        nav.ZOMBIE_THRESHOLD, nav.ATTACK_RANGE,
-        int(nav.CHASE_TIMEOUT), nav.LOW_STAT_THRESHOLD
-    ]
-    tb_max = [200, 300, 30, 300, 300, 2000, 500, 30, 100]
-    for i in range(9):
-        cv2.createTrackbar(tb_names[i], "Config", tb_init[i], tb_max[i],
-                          lambda x: None)
+    for sec_name, items in sections:
+        for name, default, vmin, vmax, desc in items:
+            cfg_sliders.append((name, 0, vmin, vmax, 0, 0, desc, sec_name))
+            cfg_values[name] = default
 
     last_nav = 0
     print("[定位] 请在地图上点击你的当前位置作为起点...")
@@ -2255,18 +2302,52 @@ def main():
                 nav._last_frame = sf
         status_canvas = nav.render_status()
         cv2.imshow("Status", status_canvas)
-        # Config trackbar值 → 同步到navigator
-        for i in range(9):
-            cv = cv2.getTrackbarPos(tb_names[i], "Config")
-            if i == 0: globals()['WAYPOINT_REACH_THRESHOLD'] = max(1, cv)
-            elif i == 1: globals()['PATH_DEVIATION_THRESHOLD'] = max(1, cv)
-            elif i == 2: globals()['MOVE_DURATION'] = max(0.05, cv / 10.0)
-            elif i == 3: globals()['GOAL_REACH_THRESHOLD'] = max(1, cv)
-            elif i == 4: globals()['LOOKAHEAD_DIST'] = max(1, cv)
-            elif i == 5: nav.ZOMBIE_THRESHOLD = max(1, cv)
-            elif i == 6: nav.ATTACK_RANGE = max(1, cv)
-            elif i == 7: nav.CHASE_TIMEOUT = max(1, cv)
-            elif i == 8: nav.LOW_STAT_THRESHOLD = max(1, cv)
+        # Config slider值 → 同步到navigator
+        cv = cfg_values
+        if "WP Reach(px)" in cv: globals()['WAYPOINT_REACH_THRESHOLD'] = cv["WP Reach(px)"]
+        if "Deviation(px)" in cv: globals()['PATH_DEVIATION_THRESHOLD'] = cv["Deviation(px)"]
+        if "Move Dur(s)" in cv: globals()['MOVE_DURATION'] = cv["Move Dur(s)"]
+        if "Goal Reach(px)" in cv: globals()['GOAL_REACH_THRESHOLD'] = cv["Goal Reach(px)"]
+        if "Lookahead(px)" in cv: globals()['LOOKAHEAD_DIST'] = cv["Lookahead(px)"]
+        if "Zombie Rng(px)" in cv: nav.ZOMBIE_THRESHOLD = cv["Zombie Rng(px)"]
+        if "Attack Rng(px)" in cv: nav.ATTACK_RANGE = cv["Attack Rng(px)"]
+        if "Chase Time(s)" in cv: nav.CHASE_TIMEOUT = cv["Chase Time(s)"]
+        if "Low Stat Thr" in cv: nav.LOW_STAT_THRESHOLD = cv["Low Stat Thr"]
+        if "Heal HP%" in cv: nav.HEAL_THRESHOLD = cv["Heal HP%"]
+        if "Escape HP%" in cv: nav.ESCAPE_THRESHOLD = cv["Escape HP%"]
+        if "W Tol" in cv: nav.WEAPON_TOLERANCE = cv["W Tol"]
+        if "W Thr" in cv: nav.WEAPON_EMPTY_THRESHOLD = cv["W Thr"]
+        if "W Check(s)" in cv: nav.WEAPON_CHECK_INTERVAL = cv["W Check(s)"]
+        if "Combat Entry HP%" in cv: nav.COMBAT_ENTRY_HP = cv["Combat Entry HP%"]
+        if "Max Zombies" in cv: nav.COMBAT_ENTRY_MAX_ZOMBIES = cv["Max Zombies"]
+
+        # Render Config window
+        cfg_canvas = np.zeros((620, 500, 3), dtype=np.uint8)
+        F = cv2.FONT_HERSHEY_SIMPLEX
+        y = 15
+        last_sec = ""
+        for i, (name, _, vmin, vmax, _, _, desc, sec) in enumerate(cfg_sliders):
+            if sec != last_sec:
+                cv2.putText(cfg_canvas, f"-- {sec} --", (10, y), F, 0.4, (0, 255, 255), 1)
+                y += 18; last_sec = sec
+            val = cfg_values.get(name, vmin)
+            pct = (val - vmin) / (vmax - vmin) if vmax > vmin else 0
+            bar_x, bar_y, bar_w, bar_h = 10, y, 200, 12
+            cfg_sliders[i] = (name, bar_y + bar_h//2, vmin, vmax, bar_x, bar_w, desc, sec)
+            # 滑块背景
+            cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (60, 60, 60), -1)
+            cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (100, 100, 100), 1)
+            # 滑块填充
+            fill_w = int(bar_w * pct)
+            cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + fill_w, bar_y + bar_h), (0, 200, 0), -1)
+            # 文字
+            cv2.putText(cfg_canvas, f"{name}: {val}", (220, y + 10), F, 0.3, (200, 200, 200), 1)
+            cv2.putText(cfg_canvas, desc, (220, y + 24), F, 0.22, (120, 120, 120), 1)
+            y += 30
+        cv2.putText(cfg_canvas, "Drag sliders to adjust | Close window to hide",
+                   (10, 605), F, 0.25, (150, 150, 150), 1)
+        cv2.imshow("Config", cfg_canvas)
+
         key = cv2.waitKey(30) & 0xFF
 
         if key == ord('q') or key == ord('Q'):
