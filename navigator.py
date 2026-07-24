@@ -1688,21 +1688,14 @@ class Navigator:
                 hx, hy, hw_, hh = [int(v) for v in hp_r]
                 cv2.rectangle(frame, (hx, hy), (hx + hw_, hy + hh), (0, 255, 255), 2)
                 cv2.putText(frame, "HP", (hx, hy - 5), FONT, 0.5, (0, 255, 255), 2)
-            # 状态OCR ROI (绿色, 编辑模式选中=蓝色)
-            if self._roi_edit and self._roi_list:
-                for i, (name, rx, ry, rw, rh) in enumerate(self._roi_list):
-                    col = (255, 150, 0) if i == self._roi_sel else (0, 255, 0)
-                    th = 3 if i == self._roi_sel else 2
-                    cv2.rectangle(frame, (rx, ry), (rx + rw, ry + rh), col, th)
-                    cv2.putText(frame, name, (rx, ry - 5), FONT, 0.4, col, 1)
-            else:
-                roi_file = os.path.join(os.path.dirname(__file__),
-                                        'AImaneuver', 'ocr_reader_roi.json')
-                if os.path.exists(roi_file):
-                    for r in json.load(open(roi_file)):
-                        name, rx, ry, rw, rh = r[0], int(r[1]), int(r[2]), int(r[3]), int(r[4])
-                        cv2.rectangle(frame, (rx, ry), (rx + rw, ry + rh), (0, 255, 0), 2)
-                        cv2.putText(frame, name, (rx, ry - 5), FONT, 0.4, (0, 255, 0), 1)
+            # 状态OCR ROI (绿色框+标签)
+            roi_file = os.path.join(os.path.dirname(__file__),
+                                    'AImaneuver', 'ocr_reader_roi.json')
+            if os.path.exists(roi_file):
+                for r in json.load(open(roi_file)):
+                    name, rx, ry, rw, rh = r[0], int(r[1]), int(r[2]), int(r[3]), int(r[4])
+                    cv2.rectangle(frame, (rx, ry), (rx + rw, ry + rh), (0, 255, 0), 2)
+                    cv2.putText(frame, name, (rx, ry - 5), FONT, 0.4, (0, 255, 0), 1)
             # Food OCR ROI (蓝色)
             food_file = os.path.join(os.path.dirname(__file__),
                                      'AImaneuver', 'food_ocr_roi.json')
