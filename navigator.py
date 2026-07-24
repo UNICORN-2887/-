@@ -293,6 +293,10 @@ class Navigator:
         self._ocr_en = None          # EasyOCR英文(状态读取)
         self._post_supply_check = False  # 补给后检查标志
         self._low_stat_triggered = False  # 低状态返航已触发
+        # ROI 编辑模式
+        self._roi_edit = False       # True=编辑模式
+        self._roi_sel = 0            # 当前选中的ROI索引
+        self._roi_list = []          # [(name,x,y,w,h), ...] 可编辑ROI列表
 
         # 中键拖拽
         self._dragging = False
@@ -645,7 +649,7 @@ class Navigator:
             if action == "leave" or choice is None:
                 print(f"[补给] 无可吃食物 (虚拟 H={virt_hunger} T={virt_thirst}), 离开!"); break
 
-            print(f"\n[补给] 推荐: {choice['name']} food+{choice['food']} water+{choice['water']}")
+            print(f"\n[补给] Rec: {choice['name']} food+{choice['food']} water+{choice['water']}")
             print(f"[补给] 虚拟饱食={virt_hunger}→{virt_hunger+choice['food']} 口渴={virt_thirst}→{virt_thirst+choice['water']}")
             print(f"[补给] 已消耗总计: food+{consumed_food_total} water+{consumed_water_total}")
 
@@ -1522,22 +1526,22 @@ class Navigator:
             cv2.rectangle(canvas, (bx, by_), (bx + bw, by_ + bh), (0, 200, 0), 1)
 
             y = by_ + 16
-            cv2.putText(canvas, f"Supply R{si['round']}轮", (bx + 5, y), FONT, 0.45, (0, 255, 0), 1)
+            cv2.putText(canvas, f"Supply R{si['round']}round", (bx + 5, y), FONT, 0.45, (0, 255, 0), 1)
             y += 20
-            cv2.putText(canvas, f"初始: H={si['init_hunger']} T={si['init_thirst']}",
+            cv2.putText(canvas, f"Init: H={si['init_hunger']} T={si['init_thirst']}",
                        (bx + 5, y), FONT, 0.35, (200, 200, 200), 1)
             y += 16
-            cv2.putText(canvas, f"虚拟: H={si['virt_hunger']} T={si['virt_thirst']}",
+            cv2.putText(canvas, f"Virt: H={si['virt_hunger']} T={si['virt_thirst']}",
                        (bx + 5, y), FONT, 0.4, (0, 255, 255), 1)
             y += 16
-            cv2.putText(canvas, f"已吃: food+{si['consumed_food']} water+{si['consumed_water']}",
+            cv2.putText(canvas, f"Ate: food+{si['consumed_food']} water+{si['consumed_water']}",
                        (bx + 5, y), FONT, 0.35, (255, 200, 100), 1)
             y += 20
 
             # 推荐
             ch = si.get('choice')
             if ch:
-                cv2.putText(canvas, f"推荐: {ch['name']} f+{ch['food']} w+{ch['water']}",
+                cv2.putText(canvas, f"Rec: {ch['name']} f+{ch['food']} w+{ch['water']}",
                            (bx + 5, y), FONT, 0.38, (0, 255, 100), 1)
                 y += 18
 
@@ -1578,7 +1582,7 @@ class Navigator:
         cv2.putText(canvas, f"Sta: {self.stamina_val}", (sbx + 3, y),
                    FONT, 0.3, (200, 200, 200), 1)
         y += 14
-        cv2.putText(canvas, f"Return threshold: <{self.LOW_STAT_THRESHOLD} (U/J)", (sbx + 3, y),
+        cv2.putText(canvas, f"Return threshold: <{self.LOW_STAT_THRESHOLD} (O/P)", (sbx + 3, y),
                    FONT, 0.25, (150, 150, 150), 1)
         y += 14
         # 玩家坐标
@@ -1628,7 +1632,7 @@ class Navigator:
                            FONT, 0.28, (200, 200, 200), 1)
         y += 14
         if self.skip_count > 0:
-            cv2.putText(canvas, f"跳过: {self.skip_count}/5", (sbx + 3, y),
+            cv2.putText(canvas, f"Skip: {self.skip_count}/5", (sbx + 3, y),
                        FONT, 0.3, (255, 150, 0), 1)
             y += 14
         y += 2
@@ -1684,15 +1688,21 @@ class Navigator:
                 hx, hy, hw_, hh = [int(v) for v in hp_r]
                 cv2.rectangle(frame, (hx, hy), (hx + hw_, hy + hh), (0, 255, 255), 2)
                 cv2.putText(frame, "HP", (hx, hy - 5), FONT, 0.5, (0, 255, 255), 2)
-            # 状态OCR ROI (绿色)
-            roi_file = os.path.join(os.path.dirname(__file__),
-                                    'AImaneuver', 'ocr_reader_roi.json')
-            if os.path.exists(roi_file):
-                saved = json.load(open(roi_file))
-                for r in saved:
-                    name, rx, ry, rw, rh = r[0], int(r[1]), int(r[2]), int(r[3]), int(r[4])
-                    cv2.rectangle(frame, (rx, ry), (rx + rw, ry + rh), (0, 255, 0), 2)
-                    cv2.putText(frame, name, (rx, ry - 5), FONT, 0.4, (0, 255, 0), 1)
+            # 状态OCR ROI (绿色, 编辑模式选中=蓝色)
+            if self._roi_edit and self._roi_list:
+                for i, (name, rx, ry, rw, rh) in enumerate(self._roi_list):
+                    col = (255, 150, 0) if i == self._roi_sel else (0, 255, 0)
+                    th = 3 if i == self._roi_sel else 2
+                    cv2.rectangle(frame, (rx, ry), (rx + rw, ry + rh), col, th)
+                    cv2.putText(frame, name, (rx, ry - 5), FONT, 0.4, col, 1)
+            else:
+                roi_file = os.path.join(os.path.dirname(__file__),
+                                        'AImaneuver', 'ocr_reader_roi.json')
+                if os.path.exists(roi_file):
+                    for r in json.load(open(roi_file)):
+                        name, rx, ry, rw, rh = r[0], int(r[1]), int(r[2]), int(r[3]), int(r[4])
+                        cv2.rectangle(frame, (rx, ry), (rx + rw, ry + rh), (0, 255, 0), 2)
+                        cv2.putText(frame, name, (rx, ry - 5), FONT, 0.4, (0, 255, 0), 1)
             # Food OCR ROI (蓝色)
             food_file = os.path.join(os.path.dirname(__file__),
                                      'AImaneuver', 'food_ocr_roi.json')
@@ -1731,7 +1741,7 @@ class Navigator:
         cv2.putText(canvas, f"H: {self.hunger_val}  T: {self.thirst_val}  S: {self.stamina_val}",
                    (rx, y), FONT, 0.4, (200, 200, 200), 1)
         y += 18
-        cv2.putText(canvas, f"RetThr: <{self.LOW_STAT_THRESHOLD} (U/J)",
+        cv2.putText(canvas, f"RetThr: <{self.LOW_STAT_THRESHOLD} (O/P)",
                    (rx, y), FONT, 0.3, (150, 150, 150), 1)
         y += 22
 
@@ -2015,13 +2025,48 @@ def main():
             nav.status_msg = "Reset, 请重新设定起点/途径点/终点"
             print("[重置] 起点/waypoints/goal/path cleared")
 
-        # U/J = 调整Return threshold
-        elif key in (ord('u'), ord('U')):
+        # O/P = 调整Return threshold
+        elif key in (ord('o'), ord('O')):
             nav.LOW_STAT_THRESHOLD = min(100, nav.LOW_STAT_THRESHOLD + 5)
-            print(f"[阈值] Return threshold: {nav.LOW_STAT_THRESHOLD}")
-        elif key in (ord('j'), ord('J')):
+            print(f"[Thr] Return: <{nav.LOW_STAT_THRESHOLD}")
+        elif key in (ord('p'), ord('P')):
             nav.LOW_STAT_THRESHOLD = max(1, nav.LOW_STAT_THRESHOLD - 5)
-            print(f"[阈值] Return threshold: {nav.LOW_STAT_THRESHOLD}")
+            print(f"[Thr] Return: <{nav.LOW_STAT_THRESHOLD}")
+
+        # U = 切换ROI编辑模式
+        elif key in (ord('u'), ord('U')):
+            nav._roi_edit = not nav._roi_edit
+            if nav._roi_edit:
+                bd = os.path.dirname(__file__)
+                nav._roi_list = []
+                rf = os.path.join(bd, 'AImaneuver', 'ocr_reader_roi.json')
+                if os.path.exists(rf):
+                    for r in json.load(open(rf)):
+                        nav._roi_list.append([r[0], int(r[1]), int(r[2]), int(r[3]), int(r[4])])
+                nav._roi_sel = 0
+                print(f"[ROI Edit] ON, {len(nav._roi_list)} regions")
+            else:
+                print("[ROI Edit] OFF")
+        # ROI编辑模式下的快捷键
+        elif nav._roi_edit and key == 9:  # Tab
+            nav._roi_sel = (nav._roi_sel + 1) % max(1, len(nav._roi_list))
+            n = nav._roi_list[nav._roi_sel][0] if nav._roi_list else '?'
+            print(f"[ROI] Sel: {n}")
+        elif nav._roi_edit and key in (ord('s'), ord('S')):
+            out = [[n, x, y, w, h] for n, x, y, w, h in nav._roi_list]
+            rf = os.path.join(os.path.dirname(__file__), 'AImaneuver', 'ocr_reader_roi.json')
+            json.dump(out, open(rf, 'w'))
+            print(f"[ROI] Saved {len(out)} regions")
+        elif nav._roi_edit and nav._roi_list and key in (
+                ord('i'), ord('I'), ord('k'), ord('K'), ord('j'), ord('J'), ord('l'), ord('L')):
+            r = nav._roi_list[nav._roi_sel]
+            sh = key in (ord('I'), ord('K'), ord('J'), ord('L'))
+            s = 1
+            if key in (ord('i'), ord('I')): r[2 if sh else 1] -= s
+            elif key in (ord('k'), ord('K')): r[2 if sh else 1] += s
+            elif key in (ord('j'), ord('J')): r[3 if sh else 0] -= s
+            elif key in (ord('l'), ord('L')): r[3 if sh else 0] += s
+            r[0] = max(0, r[0]); r[1] = max(0, r[1]); r[2] = max(5, r[2]); r[3] = max(5, r[3])
 
         # Esc = 停止
         elif key == 27:
