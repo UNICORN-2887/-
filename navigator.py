@@ -581,8 +581,8 @@ class Navigator:
             lp3 = _wa.MAKELONG(sx, sy)
             _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp3)
 
-            # 持续 drain + 泵消息 (关键! 必须2秒)
-            for _ in range(2):
+            # 持续 drain + 泵消息
+            for _ in range(3):
                 deadline2 = time.time() + 0.8
                 while time.time() < deadline2:
                     cap.grab(); cv2.waitKey(1)
