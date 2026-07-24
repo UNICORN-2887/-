@@ -929,7 +929,7 @@ class Navigator:
                 return
         if not hasattr(self, '_last_ocr_time'):
             self._last_ocr_time = 0
-            self._debug_ocr = True  # OCR调试(看终端)
+            self._debug_ocr = False  # OCR调试(看终端)
         if time.time() - self._last_ocr_time > 2.0:
             self._last_ocr_time = time.time()
             roi_file = os.path.join(os.path.dirname(__file__),
