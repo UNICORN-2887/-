@@ -751,14 +751,15 @@ class Navigator:
                             best_cy2 = (y1b + y2b) // 2
                             break
                     if best_cx2 is None: continue
-                    for _ in range(3):
+                    # 每次YOLO只点1次, 等2s检测, 避免连点误触离开
+                    for _ in range(1):
                         rx2 = best_cx2 + dx2 + random.randint(-80, 80)
                         ry2 = best_cy2 + dy2 + random.randint(-80, 80)
                         lp3 = _wa.MAKELONG(rx2, ry2)
                         _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp3)
                         time.sleep(0.05)
                         _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp3)
-                        time.sleep(1.5)
+                        time.sleep(2.0)
                         # drain OBS缓冲再检测
                         for _ in range(5):
                             cap.grab(); cv2.waitKey(1)
