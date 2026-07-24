@@ -719,7 +719,9 @@ class Navigator:
         if self._post_supply_check:
             self._post_supply_check = False
             self._low_stat_triggered = False
-            # 重新读取状态
+            # 等待游戏UI切换回正常HUD, 再读状态
+            print("[补给] 等待UI切换...")
+            time.sleep(2.0)
             for _ in range(3):
                 ret, sf = self.tracker.cap.read() if self.tracker else (False, None)
                 if ret: self._read_status_values(sf); time.sleep(0.3)
