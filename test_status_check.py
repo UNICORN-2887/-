@@ -54,11 +54,8 @@ while True:
     for name, rx, ry, rw, rh in ocr_regions:
         roi = frame[ry:ry+rh, rx:rx+rw]
         if roi.size == 0: continue
-        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        big = cv2.resize(gray, (rw*6, rh*6), interpolation=cv2.INTER_CUBIC)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
-        enhanced = clahe.apply(big)
-        rt = ocr_en.readtext(enhanced, detail=1, allowlist="0123456789")
+        big = cv2.resize(roi, (rw*5, rh*5), interpolation=cv2.INTER_CUBIC)
+        rt = ocr_en.readtext(big, detail=1, allowlist="0123456789")
         if rt:
             raw_parts = [r[1].strip() for r in rt]
             v = "".join([p for p in raw_parts if p.isdigit()])

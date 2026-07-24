@@ -547,11 +547,8 @@ class Navigator:
             for name, rx, ry, rw, rh in STATUS_REGIONS:
                 roi = f[ry:ry+rh, rx:rx+rw]
                 if roi.size == 0: continue
-                gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-                big = cv2.resize(gray, (rw*6, rh*6), interpolation=cv2.INTER_CUBIC)
-                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
-                enhanced = clahe.apply(big)
-                r = ocr_en.readtext(enhanced, detail=1, allowlist="0123456789")
+                big = cv2.resize(roi, (rw*5, rh*5), interpolation=cv2.INTER_CUBIC)
+                r = ocr_en.readtext(big, detail=1, allowlist="0123456789")
                 if r:
                     # 拼接所有数字 + 约束到200
                     v = "".join([x[1].strip() for x in r if x[1].strip().isdigit()])
@@ -858,11 +855,8 @@ class Navigator:
                     rx, ry, rw, rh = int(r[1]), int(r[2]), int(r[3]), int(r[4])
                     roi = frame[ry:ry+rh, rx:rx+rw]
                     if roi.size == 0: continue
-                    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-                    big = cv2.resize(gray, (rw*6, rh*6), interpolation=cv2.INTER_CUBIC)
-                    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
-                    enhanced = clahe.apply(big)
-                    rt = self._ocr_en.readtext(enhanced, detail=1, allowlist="0123456789")
+                    big = cv2.resize(roi, (rw*5, rh*5), interpolation=cv2.INTER_CUBIC)
+                    rt = self._ocr_en.readtext(big, detail=1, allowlist="0123456789")
                     if rt:
                         v = "".join([r[1].strip() for r in rt if r[1].strip().isdigit()])
                         if v.isdigit():
