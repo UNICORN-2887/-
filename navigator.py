@@ -2049,6 +2049,14 @@ def main():
             nav.status_msg = "Reset, 请重新设定起点/途径点/终点"
             print("[重置] 起点/waypoints/goal/path cleared")
 
+        # O/P = 快速调整返航阈值
+        elif key in (ord('o'), ord('O')):
+            nav.LOW_STAT_THRESHOLD = min(100, nav.LOW_STAT_THRESHOLD + 5)
+            print(f"[Thr] Return: <{nav.LOW_STAT_THRESHOLD}")
+        elif key in (ord('p'), ord('P')):
+            nav.LOW_STAT_THRESHOLD = max(1, nav.LOW_STAT_THRESHOLD - 5)
+            print(f"[Thr] Return: <{nav.LOW_STAT_THRESHOLD}")
+
         # F = 控制台输入调整参数
         elif key in (ord('f'), ord('F')):
             print("\n=== Config ===")
