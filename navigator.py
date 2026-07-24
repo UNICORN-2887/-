@@ -759,7 +759,7 @@ class Navigator:
                         _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp3)
                         time.sleep(0.05)
                         _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp3)
-                        time.sleep(2.0)
+                        time.sleep(3.0)
                         # drain OBS缓冲再检测
                         for _ in range(5):
                             cap.grab(); cv2.waitKey(1)
