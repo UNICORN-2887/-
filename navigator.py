@@ -2049,106 +2049,51 @@ def main():
             nav.status_msg = "Reset, 请重新设定起点/途径点/终点"
             print("[重置] 起点/waypoints/goal/path cleared")
 
-        # F = 切换配置参数 / +/- = 调整
+        # F = 控制台输入调整参数
         elif key in (ord('f'), ord('F')):
-            nav._cfg_sel = (nav._cfg_sel + 1) % 9
-            cfgs = [("WP Reach", WAYPOINT_REACH_THRESHOLD, 5),
-                    ("Deviation", PATH_DEVIATION_THRESHOLD, 10),
-                    ("Move Dur", MOVE_DURATION, 0.1),
-                    ("Goal Reach", GOAL_REACH_THRESHOLD, 10),
-                    ("Lookahead", LOOKAHEAD_DIST, 10),
-                    ("Zombie Rng", nav.ZOMBIE_THRESHOLD, 50),
-                    ("Attack Rng", nav.ATTACK_RANGE, 10),
-                    ("Chase s", nav.CHASE_TIMEOUT, 2),
-                    ("Low Stat", nav.LOW_STAT_THRESHOLD, 5)]
-            print(f"[CFG] {cfgs[nav._cfg_sel][0]} = {cfgs[nav._cfg_sel][1]}")
-        elif key == ord('.') or key == ord('>'):
-            cfgs = [("WP Reach", WAYPOINT_REACH_THRESHOLD, 5, 'global'),
-                    ("Deviation", PATH_DEVIATION_THRESHOLD, 10, 'global'),
-                    ("Move Dur", MOVE_DURATION, 0.1, 'global'),
-                    ("Goal Reach", GOAL_REACH_THRESHOLD, 10, 'global'),
-                    ("Lookahead", LOOKAHEAD_DIST, 10, 'global'),
-                    ("Zombie Rng", 'ZOMBIE_THRESHOLD', 50, 'attr'),
-                    ("Attack Rng", 'ATTACK_RANGE', 10, 'attr'),
-                    ("Chase s", 'CHASE_TIMEOUT', 2, 'attr'),
-                    ("Low Stat", 'LOW_STAT_THRESHOLD', 5, 'attr')]
-            if nav._cfg_sel < len(cfgs):
-                nm, _, step, tp = cfgs[nav._cfg_sel]
-                if tp == 'attr':
-                    setattr(nav, nm[0] if isinstance(nm, str) else nm,
-                            getattr(nav, nm[0] if isinstance(nm, str) else nm) + step)
-                elif nm == 'WAYPOINT_REACH_THRESHOLD':
-                    globals()['WAYPOINT_REACH_THRESHOLD'] += step
-                elif nm == 'PATH_DEVIATION_THRESHOLD':
-                    globals()['PATH_DEVIATION_THRESHOLD'] += step
-                elif nm == 'MOVE_DURATION':
-                    globals()['MOVE_DURATION'] += step
-                elif nm == 'GOAL_REACH_THRESHOLD':
-                    globals()['GOAL_REACH_THRESHOLD'] += step
-                elif nm == 'LOOKAHEAD_DIST':
-                    globals()['LOOKAHEAD_DIST'] += step
-                print(f"[CFG] {nm} += {step}")
-        elif key == ord(',') or key == ord('<'):
-            cfgs = [("WP Reach", WAYPOINT_REACH_THRESHOLD, 5, 'global'),
-                    ("Deviation", PATH_DEVIATION_THRESHOLD, 10, 'global'),
-                    ("Move Dur", MOVE_DURATION, 0.1, 'global'),
-                    ("Goal Reach", GOAL_REACH_THRESHOLD, 10, 'global'),
-                    ("Lookahead", LOOKAHEAD_DIST, 10, 'global'),
-                    ("Zombie Rng", 'ZOMBIE_THRESHOLD', 50, 'attr'),
-                    ("Attack Rng", 'ATTACK_RANGE', 10, 'attr'),
-                    ("Chase s", 'CHASE_TIMEOUT', 2, 'attr'),
-                    ("Low Stat", 'LOW_STAT_THRESHOLD', 5, 'attr')]
-            if nav._cfg_sel < len(cfgs):
-                nm, _, step, tp = cfgs[nav._cfg_sel]
-                if tp == 'attr':
-                    an = nm
-                    setattr(nav, an, max(1, getattr(nav, an) - step))
-                elif nm == 'WAYPOINT_REACH_THRESHOLD':
-                    globals()['WAYPOINT_REACH_THRESHOLD'] = max(1, WAYPOINT_REACH_THRESHOLD - step)
-                elif nm == 'PATH_DEVIATION_THRESHOLD':
-                    globals()['PATH_DEVIATION_THRESHOLD'] = max(1, PATH_DEVIATION_THRESHOLD - step)
-                elif nm == 'MOVE_DURATION':
-                    globals()['MOVE_DURATION'] = max(0.05, MOVE_DURATION - step)
-                elif nm == 'GOAL_REACH_THRESHOLD':
-                    globals()['GOAL_REACH_THRESHOLD'] = max(1, GOAL_REACH_THRESHOLD - step)
-                elif nm == 'LOOKAHEAD_DIST':
-                    globals()['LOOKAHEAD_DIST'] = max(1, LOOKAHEAD_DIST - step)
-                print(f"[CFG] {nm} -= {step}")
-
-        # U = 切换ROI编辑模式
-        elif key in (ord('u'), ord('U')):
-            nav._roi_edit = not nav._roi_edit
-            if nav._roi_edit:
-                bd = os.path.dirname(__file__)
-                nav._roi_list = []
-                rf = os.path.join(bd, 'AImaneuver', 'ocr_reader_roi.json')
-                if os.path.exists(rf):
-                    for r in json.load(open(rf)):
-                        nav._roi_list.append([r[0], int(r[1]), int(r[2]), int(r[3]), int(r[4])])
-                nav._roi_sel = 0
-                print(f"[ROI Edit] ON, {len(nav._roi_list)} regions")
-            else:
-                print("[ROI Edit] OFF")
-        # ROI编辑模式下的快捷键
-        elif nav._roi_edit and key == 9:  # Tab
-            nav._roi_sel = (nav._roi_sel + 1) % max(1, len(nav._roi_list))
-            n = nav._roi_list[nav._roi_sel][0] if nav._roi_list else '?'
-            print(f"[ROI] Sel: {n}")
-        elif nav._roi_edit and key in (ord('s'), ord('S')):
-            out = [[n, x, y, w, h] for n, x, y, w, h in nav._roi_list]
-            rf = os.path.join(os.path.dirname(__file__), 'AImaneuver', 'ocr_reader_roi.json')
-            json.dump(out, open(rf, 'w'))
-            print(f"[ROI] Saved {len(out)} regions")
-        elif nav._roi_edit and nav._roi_list and key in (
-                ord('i'), ord('I'), ord('k'), ord('K'), ord('j'), ord('J'), ord('l'), ord('L')):
-            r = nav._roi_list[nav._roi_sel]
-            sh = key in (ord('I'), ord('K'), ord('J'), ord('L'))
-            s = 1
-            if key in (ord('i'), ord('I')): r[2 if sh else 1] -= s
-            elif key in (ord('k'), ord('K')): r[2 if sh else 1] += s
-            elif key in (ord('j'), ord('J')): r[3 if sh else 0] -= s
-            elif key in (ord('l'), ord('L')): r[3 if sh else 0] += s
-            r[0] = max(0, r[0]); r[1] = max(0, r[1]); r[2] = max(5, r[2]); r[3] = max(5, r[3])
+            print("\n=== Config ===")
+            cfgs = [
+                ("WP Reach", WAYPOINT_REACH_THRESHOLD),
+                ("Deviation", PATH_DEVIATION_THRESHOLD),
+                ("Move Dur", MOVE_DURATION),
+                ("Goal Reach", GOAL_REACH_THRESHOLD),
+                ("Lookahead", LOOKAHEAD_DIST),
+                ("Zombie Rng", nav.ZOMBIE_THRESHOLD),
+                ("Attack Rng", nav.ATTACK_RANGE),
+                ("Chase s", nav.CHASE_TIMEOUT),
+                ("Low Stat", nav.LOW_STAT_THRESHOLD),
+            ]
+            for i, (n, v) in enumerate(cfgs):
+                print(f"  [{i+1}] {n}: {v}")
+            inp = input("编号=新值 (如 3=0.3 回车跳过): ").strip()
+            if inp and '=' in inp:
+                try:
+                    idx_str, val_str = inp.split('=', 1)
+                    idx = int(idx_str.strip()) - 1
+                    val = float(val_str.strip())
+                    if 0 <= idx < 9:
+                        nm = cfgs[idx][0]
+                        if nm == "WP Reach":
+                            globals()['WAYPOINT_REACH_THRESHOLD'] = int(val)
+                        elif nm == "Deviation":
+                            globals()['PATH_DEVIATION_THRESHOLD'] = int(val)
+                        elif nm == "Move Dur":
+                            globals()['MOVE_DURATION'] = max(0.05, val)
+                        elif nm == "Goal Reach":
+                            globals()['GOAL_REACH_THRESHOLD'] = int(val)
+                        elif nm == "Lookahead":
+                            globals()['LOOKAHEAD_DIST'] = int(val)
+                        elif nm == "Zombie Rng":
+                            nav.ZOMBIE_THRESHOLD = max(1, int(val))
+                        elif nm == "Attack Rng":
+                            nav.ATTACK_RANGE = max(1, int(val))
+                        elif nm == "Chase s":
+                            nav.CHASE_TIMEOUT = max(1, int(val))
+                        elif nm == "Low Stat":
+                            nav.LOW_STAT_THRESHOLD = max(1, int(val))
+                        print(f"[CFG] {nm} = {val}")
+                except Exception as e:
+                    print(f"[CFG] Error: {e}")
 
         # Esc = 停止
         elif key == 27:
