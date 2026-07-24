@@ -2122,14 +2122,6 @@ def main():
             if nav.state != nav.STATE_READY and nav.start and (nav.waypoints or nav.goal):
                 nav.plan_path()
             if nav.state == nav.STATE_READY:
-                if nav.ctrl:
-                    print("[测试] 发送 W 键 0.2s...")
-                    nav.ctrl.press(nav.ctrl.VK_W, 0.2)
-                    time.sleep(0.3)
-                    print("[测试] 发送 D 键 0.2s...")
-                    nav.ctrl.press(nav.ctrl.VK_D, 0.2)
-                    time.sleep(0.3)
-                    print("[测试] 控制器测试完成，观察角色是否移动")
                 nav.state = nav.STATE_NAVIGATING
                 nav.returning_home = False
                 print("[导航] 开始!")
