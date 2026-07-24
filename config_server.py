@@ -37,33 +37,33 @@ HTML = r'''
   button{background:#0a0;color:#fff;border:none;padding:10px 30px;font-size:16px;margin:20px 0;cursor:pointer}
   .status{color:#0f0;margin-left:10px}
 </style></head><body>
-<h1>DeadMaze Config Panel</h1>
-<p class="note">Skill slot 2 must be healing skill | Cooldowns: real game CD + 2 seconds | Max 8 food items</p>
+<h1>DeadMaze 参数配置</h1>
+<p class="note">⚠ 技能栏第2格必须放治疗技能 | 冷却时间=游戏CD+2秒 | 食物不超过8个否则OCR可能失效</p>
 
-<h2>NAVIGATION</h2>
-<div class="row"><label>WP Reach (px)</label><input type="range" id="waypoint_reach" min="5" max="200"><span class="val"></span><input type="number"><span class="desc">waypoint arrival dist</span></div>
-<div class="row"><label>Deviation (px)</label><input type="range" id="deviation" min="10" max="300"><span class="val"></span><input type="number"><span class="desc">replan when off path</span></div>
-<div class="row"><label>Move Dur (s)</label><input type="range" id="move_dur" min="0.05" max="3" step="0.05"><span class="val"></span><input type="number"><span class="desc">key press duration</span></div>
-<div class="row"><label>Goal Reach (px)</label><input type="range" id="goal_reach" min="10" max="300"><span class="val"></span><input type="number"><span class="desc">goal arrival dist</span></div>
-<div class="row"><label>Lookahead (px)</label><input type="range" id="lookahead" min="10" max="300"><span class="val"></span><input type="number"><span class="desc">forward lookahead dist</span></div>
+<h2>NAVIGATION 导航</h2>
+<div class="row"><label>WP Reach (px)</label><input type="range" id="waypoint_reach" min="5" max="200"><span class="val"></span><input type="number"><span class="desc">到达途径点判定距离</span></div>
+<div class="row"><label>Deviation (px)</label><input type="range" id="deviation" min="10" max="300"><span class="val"></span><input type="number"><span class="desc">偏离路径多远重规划</span></div>
+<div class="row"><label>Move Dur (s)</label><input type="range" id="move_dur" min="0.05" max="3" step="0.05"><span class="val"></span><input type="number"><span class="desc">单次按键持续时长</span></div>
+<div class="row"><label>Goal Reach (px)</label><input type="range" id="goal_reach" min="10" max="300"><span class="val"></span><input type="number"><span class="desc">到达终点判定距离</span></div>
+<div class="row"><label>Lookahead (px)</label><input type="range" id="lookahead" min="10" max="300"><span class="val"></span><input type="number"><span class="desc">前向路标选择距离</span></div>
 
-<h2>COMBAT</h2>
-<div class="row"><label>Zombie Range (px)</label><input type="range" id="zombie_range" min="100" max="2000"><span class="val"></span><input type="number"><span class="desc">combat search radius</span></div>
-<div class="row"><label>Attack Range (px)</label><input type="range" id="attack_range" min="20" max="500"><span class="val"></span><input type="number"><span class="desc">attack range</span></div>
-<div class="row"><label>Chase Timeout (s)</label><input type="range" id="chase_timeout" min="1" max="30"><span class="val"></span><input type="number"><span class="desc">chase timeout per target</span></div>
-<div class="row"><label>Combat Entry HP%</label><input type="range" id="combat_entry_hp" min="20" max="100"><span class="val"></span><input type="number"><span class="desc">min HP to enter combat</span></div>
-<div class="row"><label>Max Zombies</label><input type="range" id="max_zombies" min="1" max="20"><span class="val"></span><input type="number"><span class="desc">max zombies to enter combat</span></div>
+<h2>COMBAT 战斗</h2>
+<div class="row"><label>Zombie Range (px)</label><input type="range" id="zombie_range" min="100" max="2000"><span class="val"></span><input type="number"><span class="desc">作战搜索半径</span></div>
+<div class="row"><label>Attack Range (px)</label><input type="range" id="attack_range" min="20" max="500"><span class="val"></span><input type="number"><span class="desc">攻击距离</span></div>
+<div class="row"><label>Chase Timeout (s)</label><input type="range" id="chase_timeout" min="1" max="30"><span class="val"></span><input type="number"><span class="desc">追击超时(超时换目标)</span></div>
+<div class="row"><label>Combat Entry HP%</label><input type="range" id="combat_entry_hp" min="20" max="100"><span class="val"></span><input type="number"><span class="desc">最低血量才进入战斗</span></div>
+<div class="row"><label>Max Zombies</label><input type="range" id="max_zombies" min="1" max="20"><span class="val"></span><input type="number"><span class="desc">进入战斗的最大僵尸数</span></div>
 
-<h2>STATUS</h2>
-<div class="row"><label>Low Stat Thr</label><input type="range" id="low_stat_thr" min="1" max="100"><span class="val"></span><input type="number"><span class="desc">H/T/S below=return</span></div>
-<div class="row"><label>Heal HP%</label><input type="range" id="heal_hp" min="20" max="100"><span class="val"></span><input type="number"><span class="desc">HP below=use skill_2</span></div>
-<div class="row"><label>Escape HP%</label><input type="range" id="escape_hp" min="5" max="50"><span class="val"></span><input type="number"><span class="desc">HP below=escape dash</span></div>
-<div class="row"><label>Return Thr</label><input type="range" id="return_thr" min="1" max="100"><span class="val"></span><input type="number"><span class="desc">same as Low Stat (O/P key)</span></div>
+<h2>STATUS 状态</h2>
+<div class="row"><label>Low Stat Thr</label><input type="range" id="low_stat_thr" min="1" max="100"><span class="val"></span><input type="number"><span class="desc">H/T/S低于此值触发返航</span></div>
+<div class="row"><label>Heal HP%</label><input type="range" id="heal_hp" min="20" max="100"><span class="val"></span><input type="number"><span class="desc">HP低于此值用skill_2补血</span></div>
+<div class="row"><label>Escape HP%</label><input type="range" id="escape_hp" min="5" max="50"><span class="val"></span><input type="number"><span class="desc">HP低于此值空格脱战</span></div>
+<div class="row"><label>Return Thr</label><input type="range" id="return_thr" min="1" max="100"><span class="val"></span><input type="number"><span class="desc">等同于Low Stat(O/P快捷键)</span></div>
 
-<h2>WEAPON</h2>
-<div class="row"><label>W Tolerance</label><input type="range" id="weapon_tol" min="5" max="100"><span class="val"></span><input type="number"><span class="desc">color tolerance</span></div>
-<div class="row"><label>W Threshold</label><input type="range" id="weapon_thr" min="0.05" max="0.9" step="0.05"><span class="val"></span><input type="number"><span class="desc">empty threshold</span></div>
-<div class="row"><label>W Check (s)</label><input type="range" id="weapon_check" min="5" max="60"><span class="val"></span><input type="number"><span class="desc">weapon check interval</span></div>
+<h2>WEAPON 武器</h2>
+<div class="row"><label>W Tolerance</label><input type="range" id="weapon_tol" min="5" max="100"><span class="val"></span><input type="number"><span class="desc">空槽颜色容差</span></div>
+<div class="row"><label>W Threshold</label><input type="range" id="weapon_thr" min="0.05" max="0.9" step="0.05"><span class="val"></span><input type="number"><span class="desc">空槽判定阈值(高于此值=空)</span></div>
+<div class="row"><label>W Check (s)</label><input type="range" id="weapon_check" min="5" max="60"><span class="val"></span><input type="number"><span class="desc">武器检测间隔</span></div>
 
 <button onclick="save()">SAVE CONFIG</button><span class="status" id="status"></span>
 <button onclick="load_cfg()" style="background:#555;margin-left:10px">RELOAD</button>
