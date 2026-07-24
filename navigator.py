@@ -222,6 +222,15 @@ class Navigator:
         self.tracker = Tracker(map_path, camera_id)
         self.position = None  # (cx, cy) 当前位置
 
+        # 加载武器ROI标定
+        wp_roi_file = os.path.join(os.path.dirname(__file__), 'weapon_roi.json')
+        if os.path.exists(wp_roi_file):
+            wp_saved = json.load(open(wp_roi_file))
+            self.WEAPON_ROI = wp_saved.get("roi", self.WEAPON_ROI)
+            self.WEAPON_TOLERANCE = wp_saved.get("tol", self.WEAPON_TOLERANCE)
+            self.WEAPON_EMPTY_THRESHOLD = wp_saved.get("thr", self.WEAPON_EMPTY_THRESHOLD)
+            print(f"[武器] 加载标定: ROI={self.WEAPON_ROI} Tol={self.WEAPON_TOLERANCE}")
+
         # YOLO (火堆检测)
         self.yolo = None
         if HAS_YOLO:
@@ -1106,7 +1115,7 @@ class Navigator:
     LOW_STAT_THRESHOLD = 15   # 饱食/口渴/耐力低于此值触发返航 (O/P调节)
     # 武器检测
     WEAPON_CHECK_INTERVAL = 15  # 武器检测间隔(秒)
-    WEAPON_ROI = [1300, 838, 30, 30]  # 武器第一格区域
+    WEAPON_ROI = [1300, 838, 30, 30]  # 武器第一格区域 (会被weapon_roi.json覆盖)
     WEAPON_EMPTY_RGB = (80, 39, 19)   # 空槽参考色
     WEAPON_TOLERANCE = 20             # 色差容差
     WEAPON_EMPTY_THRESHOLD = 0.3      # 空槽判定阈值
