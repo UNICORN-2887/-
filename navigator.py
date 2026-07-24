@@ -2222,8 +2222,23 @@ def main():
     cv2.namedWindow("Status", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Status", 960, 540)
 
+    # === Config Trackbar Window ===
     cv2.namedWindow("Config", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("Config", 500, 600)
+    cv2.resizeWindow("Config", 400, 350)
+    tb_names = [
+        "WP Reach", "Deviation", "Move Dur(x10)", "Goal Reach", "Lookahead",
+        "Zombie Rng", "Attack Rng", "Chase s", "Low Stat"
+    ]
+    tb_init = [
+        WAYPOINT_REACH_THRESHOLD, PATH_DEVIATION_THRESHOLD,
+        int(MOVE_DURATION * 10), GOAL_REACH_THRESHOLD, LOOKAHEAD_DIST,
+        nav.ZOMBIE_THRESHOLD, nav.ATTACK_RANGE,
+        int(nav.CHASE_TIMEOUT), nav.LOW_STAT_THRESHOLD
+    ]
+    tb_max = [200, 300, 30, 300, 300, 2000, 500, 30, 100]
+    for i in range(9):
+        cv2.createTrackbar(tb_names[i], "Config", tb_init[i], tb_max[i],
+                          lambda x: None)
 
     last_nav = 0
     print("[定位] 请在地图上点击你的当前位置作为起点...")
@@ -2240,8 +2255,18 @@ def main():
                 nav._last_frame = sf
         status_canvas = nav.render_status()
         cv2.imshow("Status", status_canvas)
-        config_canvas = nav.render_config()
-        cv2.imshow("Config", config_canvas)
+        # Config trackbar值 → 同步到navigator
+        for i in range(9):
+            cv = cv2.getTrackbarPos(tb_names[i], "Config")
+            if i == 0: globals()['WAYPOINT_REACH_THRESHOLD'] = max(1, cv)
+            elif i == 1: globals()['PATH_DEVIATION_THRESHOLD'] = max(1, cv)
+            elif i == 2: globals()['MOVE_DURATION'] = max(0.05, cv / 10.0)
+            elif i == 3: globals()['GOAL_REACH_THRESHOLD'] = max(1, cv)
+            elif i == 4: globals()['LOOKAHEAD_DIST'] = max(1, cv)
+            elif i == 5: nav.ZOMBIE_THRESHOLD = max(1, cv)
+            elif i == 6: nav.ATTACK_RANGE = max(1, cv)
+            elif i == 7: nav.CHASE_TIMEOUT = max(1, cv)
+            elif i == 8: nav.LOW_STAT_THRESHOLD = max(1, cv)
         key = cv2.waitKey(30) & 0xFF
 
         if key == ord('q') or key == ord('Q'):
