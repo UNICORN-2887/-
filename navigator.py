@@ -1166,9 +1166,12 @@ class Navigator:
             if self._weapon_empty and not self._weapon_stop:
                 print(f"\n[武器] 耗尽! 返航 → 停止")
                 self._weapon_stop = True
+                self.combat_state = None  # 强制退出战斗
+                self.combat_target = None
                 self.returning_home = True
                 self.goal = self.home
                 self.waypoints = []
+                self.wp_index = 0
                 self.plan_path()
                 if self.state == self.STATE_READY:
                     self.state = self.STATE_NAVIGATING
