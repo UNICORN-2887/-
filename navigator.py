@@ -871,7 +871,7 @@ class Navigator:
             # 终端打印当前状态
             if hasattr(self, '_last_status_print'):
                 if time.time() - self._last_status_print > 3.0:
-                    print(f"[Status] HP={self.hp_pct}% H={self.hunger_val} T={self.thirst_val} S={self.stamina_val}")
+                    print(f"[NavStatus] HP={self.hp_pct}% H={self.hunger_val} T={self.thirst_val} S={self.stamina_val} (OCR ran at {time.time()-self._last_ocr_time:.1f}s ago)")
                     self._last_status_print = time.time()
             else:
                 self._last_status_print = time.time()
