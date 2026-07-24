@@ -268,6 +268,7 @@ class Navigator:
         self.skills = SkillCooldown()  # 技能冷却
         self.yolo_disp = None       # YOLO检测画面 (缩小后)
         self.status_disp = None     # 状态窗画面(OBS+OCR框)
+        self._last_frame = None     # 最新OBS帧
         self.zombie_counts = {}     # 僵尸种类→数量
         self.last_waypoint_time = 0 # 到达途径点的时间戳
         self.loop_patrol = False    # 循环巡逻模式
