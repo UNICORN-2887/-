@@ -299,6 +299,7 @@ class Navigator:
         self.hunger_val = 0          # 饱食度
         self.thirst_val = 0          # 口渴度
         self.stamina_val = 0         # 耐力
+        self.threat_val = 0          # 威胁度
         self._hp_roi = None          # HP检测ROI
         self._hunger_roi = None      # 饱食度ROI
         self._thirst_roi = None      # 口渴度ROI
@@ -951,10 +952,11 @@ class Navigator:
                             if name == "Hunger": self.hunger_val = val
                             elif name == "Thirst": self.thirst_val = val
                             elif name == "Stamina": self.stamina_val = val
+                            elif name == "Threat": self.threat_val = val
             # 终端打印当前状态
             if hasattr(self, '_last_status_print'):
                 if time.time() - self._last_status_print > 3.0:
-                    print(f"[NavStatus] HP={self.hp_pct}% H={self.hunger_val} T={self.thirst_val} S={self.stamina_val} (OCR ran at {time.time()-self._last_ocr_time:.1f}s ago)")
+                    print(f"[NavStatus] HP={self.hp_pct}% H={self.hunger_val} T={self.thirst_val} S={self.stamina_val} Thr={self.threat_val} (OCR {time.time()-self._last_ocr_time:.1f}s ago)")
                     self._last_status_print = time.time()
             else:
                 self._last_status_print = time.time()
@@ -1134,6 +1136,23 @@ class Navigator:
         # ---- 规则2: 血量过低 ----
         if self.hp_pct < self.ESCAPE_THRESHOLD and self.combat_state is None:
             self._escape_to_waypoint(px, py)
+            return
+
+        # ---- 规则0: Threat≥2 → 立刻返航补给 ----
+        if (self.threat_val >= 2 and self.state == self.STATE_NAVIGATING
+                and not self._low_stat_triggered and self.home
+                and self.combat_state is None):
+            print(f"[自动返航] Threat={self.threat_val} → 返航补给")
+            self._low_stat_triggered = True
+            self._post_supply_check = True
+            self.returning_home = True
+            self.goal = self.home
+            self._saved_waypoints = list(self.waypoints)
+            self.waypoints = []
+            self.wp_index = 0
+            self.plan_path()
+            if self.state == self.STATE_READY:
+                self.state = self.STATE_NAVIGATING
             return
 
         # ---- 规则0: 武器检测 (和补血同优先级) ----
