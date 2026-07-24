@@ -753,6 +753,10 @@ class Navigator:
                     if best_cx2 is None: continue
                     # 每次YOLO只点1次, 等2s检测, 避免连点误触离开
                     for _ in range(1):
+                        # 先移开鼠标, 避免点到火堆UI
+                        _wa.SendMessage(self._game_hwnd, _wc.WM_MOUSEMOVE, 0,
+                                        _wa.MAKELONG(100, 500))
+                        time.sleep(0.3)
                         rx2 = best_cx2 + dx2 + random.randint(-80, 80)
                         ry2 = best_cy2 + dy2 + random.randint(-80, 80)
                         lp3 = _wa.MAKELONG(rx2, ry2)
