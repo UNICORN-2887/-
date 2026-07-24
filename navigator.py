@@ -739,7 +739,7 @@ class Navigator:
                 _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp2)
                 time.sleep(3.0)
                 # 重新进入火堆 (YOLO检测 + 点击)
-                for attempt2 in range(8):  # 和进火堆一样8次
+                for attempt2 in range(5):  # 最多5次
                     ret2, f2 = cap.read()
                     if not ret2: continue
                     det2 = self.yolo(f2, verbose=False, conf=0.3)[0]
@@ -759,12 +759,14 @@ class Navigator:
                         _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp3)
                         time.sleep(0.05)
                         _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp3)
-                        time.sleep(3.0)
-                        # drain OBS缓冲再检测
-                        for _ in range(5):
+                        t_clk = time.strftime("%H:%M:%S")
+                        print(f"[补给] 重进#{attempt2+1} 点击 ({rx2},{ry2}) {t_clk}")
+                        time.sleep(4.0)
+                        for _ in range(10):
                             cap.grab(); cv2.waitKey(1)
+                        t_ocr = time.strftime("%H:%M:%S")
                         if self._confirm_open():
-                            print("[补给] 重新进入火堆成功!")
+                            print(f"[补给] OCR@{t_ocr} 成功!")
                             eat_count = 0
                             # 重新读初始状态
                             h2, t2 = read_hunger_thirst()
