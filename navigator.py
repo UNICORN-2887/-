@@ -285,6 +285,7 @@ class Navigator:
         self._last_weapon_check = 0  # 上次武器检测时间
         self._weapon_empty = False   # 武器是否耗尽
         self._weapon_stop = False    # 武器耗尽→停止程序
+        self._weapon_manual = False  # 手动模式(不自动整理)
         self.hp_pct = 100            # 血量百分比
         self.hunger_val = 0          # 饱食度
         self.thirst_val = 0          # 口渴度
@@ -1051,17 +1052,18 @@ class Navigator:
         if now - self._last_weapon_check < self.WEAPON_CHECK_INTERVAL: return
         self._last_weapon_check = now
 
-        # 点击整理背包
-        cp_file = os.path.join(os.path.dirname(__file__),
-                               'AImaneuver', 'click_points.json')
-        if os.path.exists(cp_file):
-            pts = json.load(open(cp_file))
-            org = pts.get("organize_bag", {"x": 1480, "y": 857})
-            lp = _wa.MAKELONG(org["x"], org["y"])
-            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp)
-            time.sleep(0.02)
-            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
-        time.sleep(0.3)
+        # 自动模式才整理背包
+        if not self._weapon_manual:
+            cp_file = os.path.join(os.path.dirname(__file__),
+                                   'AImaneuver', 'click_points.json')
+            if os.path.exists(cp_file):
+                pts = json.load(open(cp_file))
+                org = pts.get("organize_bag", {"x": 1480, "y": 857})
+                lp = _wa.MAKELONG(org["x"], org["y"])
+                _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp)
+                time.sleep(0.02)
+                _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
+            time.sleep(0.3)
 
         # drain + 读帧
         for _ in range(5): self.tracker.cap.grab(); cv2.waitKey(1)
@@ -2198,11 +2200,12 @@ def main():
             nav.status_msg = "Reset, 请重新设定起点/途径点/终点"
             print("[重置] 起点/waypoints/goal/path cleared")
 
-        # W = 手动武器检测 (不自动整理背包)
+        # W = 切换武器检测模式 (auto/manual)
         elif key in (ord('w'), ord('W')):
-            print("[武器] 手动检测...")
-            nav._last_weapon_check = 0  # 强制检测
-            # 不点整理, 直接用当前画面检测
+            nav._weapon_manual = not nav._weapon_manual
+            mode = "MANUAL" if nav._weapon_manual else "AUTO"
+            print(f"[武器] 模式: {mode} ({'不' if nav._weapon_manual else ''}自动整理)")
+            # 立即做一次检测
             if nav.tracker and nav.tracker.cap:
                 for _ in range(3): nav.tracker.cap.grab(); cv2.waitKey(1)
                 ret, wf = nav.tracker.cap.read()
