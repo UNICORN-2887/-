@@ -856,6 +856,13 @@ class Navigator:
                             if name == "Hunger": self.hunger_val = val
                             elif name == "Thirst": self.thirst_val = val
                             elif name == "Stamina": self.stamina_val = val
+            # 终端打印当前状态
+            if hasattr(self, '_last_status_print'):
+                if time.time() - self._last_status_print > 3.0:
+                    print(f"[Status] HP={self.hp_pct}% H={self.hunger_val} T={self.thirst_val} S={self.stamina_val}")
+                    self._last_status_print = time.time()
+            else:
+                self._last_status_print = time.time()
 
     def _detect_zombies(self, frame):
         """YOLO检测僵尸, 返回[(cx, cy, name, dist), ...]"""
