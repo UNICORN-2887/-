@@ -18,7 +18,7 @@ DeadMaze - 路径导航闭环
 # 阈值配置（调试时修改这里）
 # ============================================================
 WAYPOINT_REACH_THRESHOLD = 25     # 像素，到达路标的判定距离
-PATH_DEVIATION_THRESHOLD = 60    # 像素，偏离路径多久重规划
+PATH_DEVIATION_THRESHOLD = 100    # 像素，偏离路径多久重规划
 MOVE_DURATION = 0.5            # 秒，每次按键时长
 TRACK_INTERVAL = 0.3             # 秒，追踪间隔（自动模式）
 LOOKAHEAD_DIST = 90           # 像素，向前看多少个像素选路标
@@ -1227,9 +1227,9 @@ class Navigator:
         if self.combat_state is not None:
             return
 
-        # 2. 仅手动H返航才自动进入火堆 (自动返航不进入)
+        # 2. 返航模式触发火堆交互 (H键或自动返航)
         HOME_REACH = int(GOAL_REACH_THRESHOLD * 1.5)
-        if self.returning_home and self.home and getattr(self, '_manual_home', False):
+        if self.returning_home and self.home:
             hx, hy = self.home
             d_home = np.hypot(px - hx, py - hy)
             if d_home < HOME_REACH:
