@@ -669,9 +669,13 @@ class Navigator:
             canvas = self.render()
             cv2.imshow("Nav", canvas)
             cv2.waitKey(1)
-            user_input = input("[补给] 使用此食物? (y=吃 / n=跳过 / q=离开): ").strip().lower()
+            user_input = input("[补给] 使用? (y=吃 / n=跳过 / s=模拟吃 / q=离开): ").strip().lower()
             if user_input == 'q':
                 print("[补给] 用户选择离开"); break
+            elif user_input == 's':
+                eat_count += 1
+                print(f"[补给] [模拟] eat_count={eat_count}/3 (不真吃)")
+                continue  # 跳过后面的真吃逻辑, 下一轮扫描
             elif user_input == 'n':
                 items = [it for it in items if it["name"] != choice["name"]]
                 print(f"[补给] 跳过 {choice['name']}, 重新决策...")
