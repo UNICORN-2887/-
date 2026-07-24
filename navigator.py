@@ -675,8 +675,9 @@ class Navigator:
             elif user_input == 's':
                 eat_count += 1
                 print(f"[补给] [模拟] eat_count={eat_count}/3 (不真吃)")
-                continue  # 跳过后面的真吃逻辑, 下一轮扫描
+                is_simulate = True
             elif user_input == 'n':
+                is_simulate = False
                 items = [it for it in items if it["name"] != choice["name"]]
                 print(f"[补给] 跳过 {choice['name']}, 重新决策...")
                 action2, choice2 = self._decide(virt_hunger, virt_thirst, items)
