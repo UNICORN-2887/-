@@ -267,6 +267,7 @@ class Navigator:
         self.supply_info = None  # 补给状态
         self.skills = SkillCooldown()  # 技能冷却
         self.yolo_disp = None       # YOLO检测画面 (缩小后)
+        self.status_disp = None     # 状态窗画面(OBS+OCR框)
         self.zombie_counts = {}     # 僵尸种类→数量
         self.last_waypoint_time = 0 # 到达途径点的时间戳
         self.loop_patrol = False    # 循环巡逻模式
@@ -1662,6 +1663,110 @@ class Navigator:
         return canvas
 
     # ----------------------------------------------------------
+    def render_status(self):
+        """渲染第二窗口: OBS+OCR框 + 状态信息"""
+        SW, SH = 500, 720
+        canvas = np.zeros((SH, SW, 3), dtype=np.uint8)
+        FONT = cv2.FONT_HERSHEY_SIMPLEX
+
+        # ---- OBS画面(带OCR框) ----
+        if self._last_frame is not None:
+            frame = self._last_frame.copy()
+            # 画HP ROI
+            hp_file = os.path.join(os.path.dirname(__file__),
+                                   'AImaneuver', 'hp_detector_roi.json')
+            if os.path.exists(hp_file):
+                hp_r = json.load(open(hp_file))
+                hx, hy, hw_, hh = [int(v) for v in hp_r]
+                cv2.rectangle(frame, (hx, hy), (hx + hw_, hy + hh), (0, 255, 255), 2)
+                cv2.putText(frame, "HP", (hx, hy - 5), FONT, 0.4, (0, 255, 255), 1)
+            # 画状态OCR ROI
+            roi_file = os.path.join(os.path.dirname(__file__),
+                                    'AImaneuver', 'ocr_reader_roi.json')
+            if os.path.exists(roi_file):
+                saved = json.load(open(roi_file))
+                for r in saved:
+                    name, rx, ry, rw, rh = r[0], int(r[1]), int(r[2]), int(r[3]), int(r[4])
+                    cv2.rectangle(frame, (rx, ry), (rx + rw, ry + rh), (0, 255, 0), 2)
+                    cv2.putText(frame, name, (rx, ry - 5), FONT, 0.35, (0, 255, 0), 1)
+            # YOLO检测框
+            if self.yolo and self._last_frame is not None:
+                try:
+                    det = self.yolo(frame, verbose=False, conf=0.3)[0]
+                    frame = det.plot()
+                except Exception:
+                    pass
+            # 缩放放入
+            fh, fw = frame.shape[:2]
+            mh = int(400 * fh / fw)
+            disp = cv2.resize(frame, (400, mh))
+            canvas[:mh, :400] = disp
+
+        y = mh + 10 if self._last_frame is not None else 10
+
+        # ---- 状态数值 ----
+        now = time.time()
+        cv2.putText(canvas, f"HP: {self.hp_pct}%  H: {self.hunger_val}  T: {self.thirst_val}  S: {self.stamina_val}",
+                   (5, y), FONT, 0.4, (0, 255, 0), 1)
+        y += 22
+        cv2.putText(canvas, f"Return threshold: <{self.LOW_STAT_THRESHOLD} (U/J)",
+                   (5, y), FONT, 0.3, (150, 150, 150), 1)
+        y += 20
+
+        # ---- 技能 ----
+        cv2.putText(canvas, "Skills:", (5, y), FONT, 0.4, (0, 255, 255), 1)
+        y += 18
+        for i in range(4):
+            cd = self.skills.cooldowns[i]
+            rem = self.skills.remaining(i, now)
+            ready = rem <= 0
+            col = (0, 255, 0) if ready else (255, 100, 100)
+            bar_w = int(200 * (1 - rem / cd)) if cd > 0 else 200
+            cv2.putText(canvas, f"  {i+1}:", (5, y), FONT, 0.35, (200, 200, 200), 1)
+            cv2.rectangle(canvas, (30, y - 10), (230, y + 2), (50, 50, 50), -1)
+            if bar_w > 0:
+                cv2.rectangle(canvas, (30, y - 10), (30 + bar_w, y + 2), col, -1)
+            cv2.putText(canvas, "OK" if ready else f"{rem:.0f}s",
+                       (235, y + 2), FONT, 0.3, col, 1)
+            y += 16
+
+        # ---- 僵尸列表 ----
+        y += 5
+        cv2.putText(canvas, "Zombies:", (5, y), FONT, 0.4, (255, 200, 100), 1)
+        y += 16
+        if self.zombie_list:
+            for zx_, zy_, zname_, zdist_ in self.zombie_list[:8]:
+                short = zname_.replace('ZB','').replace('Zombie','Z')
+                cv2.putText(canvas, f"  {short}: {zdist_}px",
+                           (5, y), FONT, 0.3, (200, 200, 200), 1)
+                y += 14
+        else:
+            cv2.putText(canvas, "  (none)", (5, y), FONT, 0.3, (150, 150, 150), 1)
+            y += 14
+
+        # ---- 战斗状态 ----
+        y += 5
+        if self.combat_state:
+            cv2.putText(canvas, f"COMBAT: {self.combat_state}", (5, y),
+                       FONT, 0.4, (0, 200, 255), 1)
+            y += 16
+            if self.combat_target:
+                _, _, zn2, zd2 = self.combat_target
+                short = zn2.replace('ZB','').replace('Zombie','Z')
+                cv2.putText(canvas, f"Target: {short} {zd2}px",
+                           (5, y), FONT, 0.35, (255, 200, 0), 1)
+                y += 16
+        else:
+            cv2.putText(canvas, "Mode: Patrol", (5, y), FONT, 0.4, (0, 255, 0), 1)
+            y += 16
+
+        if self.skip_count > 0:
+            cv2.putText(canvas, f"Skip: {self.skip_count}/5",
+                       (5, y), FONT, 0.35, (255, 150, 0), 1)
+
+        return canvas
+
+    # ----------------------------------------------------------
     def on_mouse(self, event, sx, sy, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
             pt = self.scr2img(sx, sy)
@@ -1756,12 +1861,17 @@ def main():
     cv2.setWindowProperty("Nav", cv2.WND_PROP_TOPMOST, 1)
     cv2.setMouseCallback("Nav", nav.on_mouse)
 
+    cv2.namedWindow("Status", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Status", 500, 720)
+
     last_nav = 0
     print("[定位] 请在地图上点击你的当前位置作为起点...")
 
     while True:
         canvas = nav.render()
         cv2.imshow("Nav", canvas)
+        status_canvas = nav.render_status()
+        cv2.imshow("Status", status_canvas)
         key = cv2.waitKey(30) & 0xFF
 
         if key == ord('q') or key == ord('Q'):
