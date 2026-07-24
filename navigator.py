@@ -1798,7 +1798,7 @@ class Navigator:
 
         # ---- 配置参数 ----
         y = SH - 130
-        cv2.putText(canvas, "Config (F=sel V/B=adj):", (rx, y),
+        cv2.putText(canvas, "Config (F=sel []=adj):", (rx, y),
                    FONT, 0.3, (150, 150, 150), 1)
         y += 12
         cfgs = [
@@ -1940,9 +1940,9 @@ def main():
             break
 
         # 缩放
-        elif key in (ord('v'), ord('V')):
+        elif key == ord(']') or key == ord('}'):
             nav.scale = min(3.0, nav.scale * 1.15)
-        elif key in (ord('b'), ord('B')):
+        elif key == ord('[') or key == ord('{'):
             nav.scale = max(0.03, nav.scale / 1.15)
 
         # 平移
@@ -2062,7 +2062,7 @@ def main():
                     ("Chase s", nav.CHASE_TIMEOUT, 2),
                     ("Low Stat", nav.LOW_STAT_THRESHOLD, 5)]
             print(f"[CFG] {cfgs[nav._cfg_sel][0]} = {cfgs[nav._cfg_sel][1]}")
-        elif key in (ord('v'), ord('V')):
+        elif key == ord(']') or key == ord('}'):
             cfgs = [("WP Reach", WAYPOINT_REACH_THRESHOLD, 5, 'global'),
                     ("Deviation", PATH_DEVIATION_THRESHOLD, 10, 'global'),
                     ("Move Dur", MOVE_DURATION, 0.1, 'global'),
@@ -2088,7 +2088,7 @@ def main():
                 elif nm == 'LOOKAHEAD_DIST':
                     globals()['LOOKAHEAD_DIST'] += step
                 print(f"[CFG] {nm} += {step}")
-        elif key in (ord('b'), ord('B')):
+        elif key == ord('[') or key == ord('{'):
             cfgs = [("WP Reach", WAYPOINT_REACH_THRESHOLD, 5, 'global'),
                     ("Deviation", PATH_DEVIATION_THRESHOLD, 10, 'global'),
                     ("Move Dur", MOVE_DURATION, 0.1, 'global'),
