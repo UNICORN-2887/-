@@ -828,7 +828,7 @@ class Navigator:
                 return
         if not hasattr(self, '_last_ocr_time'):
             self._last_ocr_time = 0
-        if time.time() - self._last_ocr_time > 5.0:
+        if time.time() - self._last_ocr_time > 2.0:
             self._last_ocr_time = time.time()
             roi_file = os.path.join(os.path.dirname(__file__),
                                     'AImaneuver', 'ocr_reader_roi.json')
@@ -1871,6 +1871,13 @@ def main():
     while True:
         canvas = nav.render()
         cv2.imshow("Nav", canvas)
+        # 即使不在导航中也读取OBS帧 (让Status窗口始终有画面)
+        if nav.tracker and nav.tracker.cap:
+            ret, sf = nav.tracker.cap.read()
+            if ret:
+                nav._read_status_values(sf)
+                nav._detect_zombies(sf)
+                nav._last_frame = sf
         status_canvas = nav.render_status()
         cv2.imshow("Status", status_canvas)
         key = cv2.waitKey(30) & 0xFF
