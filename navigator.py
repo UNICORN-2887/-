@@ -887,6 +887,7 @@ class Navigator:
                 zombies.append((cx, cy, name, dist))
         self.zombie_counts = counts
         # 按距离排序 + 过滤墙后僵尸
+        if not self.position and not self.start: return
         px, py = self.position if self.position else self.start
         if px and py and hasattr(self, 'grid') and self.grid is not None:
             valid = []
@@ -1148,6 +1149,7 @@ class Navigator:
         self.tracker.track()
         if self.tracker.last_position:
             self.position = self.tracker.last_position
+        if not self.position and not self.start: return
         px, py = self.position if self.position else self.start
         px, py = int(px), int(py)
 
