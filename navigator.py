@@ -752,7 +752,13 @@ class Navigator:
                             if h2: virt_hunger = h2
                             if t2: virt_thirst = t2
                             break
-                    if eat_count == 0: break
+                    if eat_count == 0:
+                        # 重置累计值(新火堆会话)
+                        consumed_food_total = 0
+                        consumed_water_total = 0
+                        init_hunger = virt_hunger
+                        init_thirst = virt_thirst
+                        break
                 if eat_count > 0:
                     print("[补给] 重进火堆失败, 离开")
                     break
