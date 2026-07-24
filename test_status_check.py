@@ -60,7 +60,8 @@ while True:
         enhanced = clahe.apply(big)
         rt = ocr_en.readtext(enhanced, detail=1, allowlist="0123456789")
         if rt:
-            v = rt[0][1].strip()
+            # 拼接所有数字 (OCR可能把"118"拆成"11"+"8")
+            v = "".join([r[1].strip() for r in rt if r[1].strip().isdigit()])
             if v.isdigit():
                 val = int(v)
                 if val > 200: val = int(str(val)[:2])

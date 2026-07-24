@@ -850,7 +850,7 @@ class Navigator:
                     enhanced = clahe.apply(big)
                     rt = self._ocr_en.readtext(enhanced, detail=1, allowlist="0123456789")
                     if rt:
-                        v = rt[0][1].strip()
+                        v = "".join([r[1].strip() for r in rt if r[1].strip().isdigit()])
                         if v.isdigit():
                             val = int(v)
                             if val > 200: val = int(str(val)[:2])
