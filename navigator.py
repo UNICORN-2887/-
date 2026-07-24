@@ -1409,20 +1409,20 @@ class Navigator:
         # 2. 返航模式触发火堆交互 (H键或自动返航)
         HOME_REACH = int(GOAL_REACH_THRESHOLD * 1.5)
         if self.returning_home and self.home:
-            # 武器耗尽返航: 到火堆直接停止, 不补给
-            if self._weapon_stop:
-                print(f"\n{'='*60}")
-                print(f"  !! 武器耗尽, 程序终止 !!")
-                print(f"  请更换武器后重新运行")
-                print(f"{'='*60}\n")
-                self.status_msg = "!! STOP: 武器耗尽"
-                self.state = self.STATE_IDLE
-                self.loop_patrol = False
-                self.returning_home = False
-                return
             hx, hy = self.home
             d_home = np.hypot(px - hx, py - hy)
             if d_home < HOME_REACH:
+                # 武器耗尽返航: 到火堆直接停止, 不补给
+                if self._weapon_stop:
+                    print(f"\n{'='*60}")
+                    print(f"  !! 武器耗尽, 程序终止 !!")
+                    print(f"  请更换武器后重新运行")
+                    print(f"{'='*60}\n")
+                    self.status_msg = "!! STOP: 武器耗尽"
+                    self.state = self.STATE_IDLE
+                    self.loop_patrol = False
+                    self.returning_home = False
+                    return
                 print(f"\n{'='*40}\n[返航] 距火堆{d_home:.0f}px, 触发火堆交互\n{'='*40}")
                 self.state = self.STATE_IDLE
                 self.returning_home = False
