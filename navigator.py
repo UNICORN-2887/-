@@ -577,54 +577,38 @@ class Navigator:
             lp3 = _wa.MAKELONG(sx, sy)
             _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp3)
 
-            # 持续 drain + 泵消息
+            # 持续 drain + 泵消息 (关键! 必须2秒)
             for _ in range(2):
                 deadline2 = time.time() + 0.8
                 while time.time() < deadline2:
                     cap.grab(); cv2.waitKey(1)
                 cap.retrieve()
 
-            # 两次OCR取最优 (间隔0.5s)
-            def _do_ocr():
-                for _ in range(10):
-                    cap.grab(); cv2.waitKey(1)
-                ret2, f2 = cap.retrieve()
-                if not ret2: return None, None, ""
-                rx2, ry2, rw2, rh2 = [max(1, int(v)) for v in FOOD_ROI]
-                rx2 = min(rx2, obs_w-2); ry2 = min(ry2, obs_h-2)
-                rw2 = min(rw2, obs_w-rx2); rh2 = min(rh2, obs_h-ry2)
-                roi2 = f2[ry2:ry2+rh2, rx2:rx2+rw2]
-                if roi2.size == 0: return None, None, ""
-                gray2 = cv2.cvtColor(roi2, cv2.COLOR_BGR2GRAY)
-                big2 = cv2.resize(gray2, (rw2*3, rh2*3), interpolation=cv2.INTER_CUBIC)
-                clahe2 = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
-                enhanced2 = clahe2.apply(big2)
-                r2 = ocr_zh.readtext(enhanced2, detail=1)
-                txt2 = " ".join([line[1] for line in r2]) if r2 else ""
-                fm2 = re.search(r'[食贪饮][物钩饭]\s*[+~-]?\s*(\d+)', txt2)
-                wm2 = re.search(r'水\s*[+~-]?\s*(\d+)', txt2)
-                fv2 = int(fm2.group(1)) if fm2 else None
-                wv2 = int(wm2.group(1)) if wm2 else None
-                return fv2, wv2, txt2
-
-            f1, w1, t1 = _do_ocr()
-            time.sleep(0.5)
-            # 继续 drain
-            deadline3 = time.time() + 0.5
-            while time.time() < deadline3:
+            # grab 最新帧后 retrieve
+            for _ in range(10):
                 cap.grab(); cv2.waitKey(1)
-            cap.retrieve()
-            f2, w2, t2 = _do_ocr()
+            ret, f = cap.retrieve()
+            if not ret: return None, None
 
-            # 取有内容的结果
-            if (f1 or w1) and not (f2 or w2):
-                return f1, w1
-            if (f2 or w2) and not (f1 or w1):
-                return f2, w2
-            # 都有内容, 取文字更长的
-            if len(t1) >= len(t2):
-                return f1, w1
-            return f2, w2
+            # OCR
+            rx, ry, rw, rh = [max(1, int(v)) for v in FOOD_ROI]
+            rx = min(rx, obs_w-2); ry = min(ry, obs_h-2)
+            rw = min(rw, obs_w-rx); rh = min(rh, obs_h-ry)
+            roi = f[ry:ry+rh, rx:rx+rw]
+            if roi.size == 0: return None, None
+            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            big = cv2.resize(gray, (rw*3, rh*3), interpolation=cv2.INTER_CUBIC)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
+            enhanced = clahe.apply(big)
+            r = ocr_zh.readtext(enhanced, detail=1)
+            full_txt = " ".join([line[1] for line in r]) if r else ""
+
+            # OCR 模糊匹配 + 同时提取食物和水
+            fm = re.search(r'[食贪饮][物钩饭]\s*[+~-]?\s*(\d+)', full_txt)
+            wm = re.search(r'水\s*[+~-]?\s*(\d+)', full_txt)
+            food_val = int(fm.group(1)) if fm else None
+            water_val = int(wm.group(1)) if wm else None
+            return food_val, water_val
 
         # ===== 虚拟状态追踪 (进入火堆时OCR一次, 后续累加) =====
         init_hunger, init_thirst = read_hunger_thirst()
