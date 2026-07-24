@@ -929,6 +929,7 @@ class Navigator:
                 return
         if not hasattr(self, '_last_ocr_time'):
             self._last_ocr_time = 0
+            self._debug_ocr = True  # OCR调试(看终端)
         if time.time() - self._last_ocr_time > 2.0:
             self._last_ocr_time = time.time()
             roi_file = os.path.join(os.path.dirname(__file__),
@@ -953,6 +954,10 @@ class Navigator:
                             elif name == "Thirst": self.thirst_val = val
                             elif name == "Stamina": self.stamina_val = val
                             elif name == "Threat": self.threat_val = val
+                            elif name == "Exp": pass  # Exp不用于决策
+                            # 调试: 打印每个ROI的读取结果
+                            if hasattr(self, '_debug_ocr') and self._debug_ocr:
+                                print(f"  [OCR:{name}] parts={parts} -> {v}")
             # 终端打印当前状态
             if hasattr(self, '_last_status_print'):
                 if time.time() - self._last_status_print > 3.0:
