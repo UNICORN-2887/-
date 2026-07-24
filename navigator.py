@@ -2224,7 +2224,7 @@ def main():
 
     # === Config Window (Canvas-based sliders) ===
     cv2.namedWindow("Config", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("Config", 550, 650)
+    cv2.resizeWindow("Config", 650, 750)
     cfg_mouse = {"dragging": False, "idx": -1}
 
     def cfg_on_mouse(event, sx, sy, flags, param):
@@ -2322,28 +2322,28 @@ def main():
         if "Max Zombies" in cv: nav.COMBAT_ENTRY_MAX_ZOMBIES = cv["Max Zombies"]
 
         # Render Config window
-        cfg_canvas = np.zeros((650, 550, 3), dtype=np.uint8)
+        cfg_canvas = np.zeros((750, 650, 3), dtype=np.uint8)
         F = cv2.FONT_HERSHEY_SIMPLEX
-        y = 15
+        y = 18
         last_sec = ""
         for i, (name, _, vmin, vmax, _, _, desc, sec) in enumerate(cfg_sliders):
             if sec != last_sec:
-                cv2.putText(cfg_canvas, f"-- {sec} --", (10, y), F, 0.5, (0, 255, 255), 1)
-                y += 20; last_sec = sec
+                cv2.putText(cfg_canvas, f"[ {sec} ]", (10, y), F, 0.55, (0, 255, 255), 2)
+                y += 24; last_sec = sec
             val = cfg_values.get(name, vmin)
             pct = (val - vmin) / (vmax - vmin) if vmax > vmin else 0
-            bar_x, bar_y, bar_w, bar_h = 10, y, 180, 14
+            bar_x, bar_y, bar_w, bar_h = 10, y, 220, 16
             cfg_sliders[i] = (name, bar_y + bar_h//2, vmin, vmax, bar_x, bar_w, desc, sec)
             # 滑块
-            cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (60, 60, 60), -1)
-            cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (100, 100, 100), 1)
+            cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (50, 50, 50), -1)
+            cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (120, 120, 120), 1)
             fill_w = int(bar_w * pct)
-            cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + fill_w, bar_y + bar_h), (0, 200, 0), -1)
-            cv2.putText(cfg_canvas, f"{name}: {val}", (200, y + 11), F, 0.35, (200, 200, 200), 1)
-            cv2.putText(cfg_canvas, desc, (200, y + 25), F, 0.28, (140, 140, 140), 1)
-            y += 32
-        cv2.putText(cfg_canvas, "Drag green bars to adjust values",
-                   (10, 640), F, 0.3, (150, 150, 150), 1)
+            cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + fill_w, bar_y + bar_h), (0, 220, 0), -1)
+            cv2.putText(cfg_canvas, f"{name}: {val}", (240, y + 13), F, 0.4, (220, 220, 220), 1)
+            cv2.putText(cfg_canvas, desc, (240, y + 28), F, 0.32, (160, 160, 160), 1)
+            y += 36
+        cv2.putText(cfg_canvas, "Drag green bars to adjust | Values sync to navigator in real-time",
+                   (10, 735), F, 0.32, (150, 150, 150), 1)
         cv2.imshow("Config", cfg_canvas)
 
         key = cv2.waitKey(30) & 0xFF
