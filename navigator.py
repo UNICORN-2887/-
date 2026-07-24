@@ -692,20 +692,21 @@ class Navigator:
                 if confirm != 'y':
                     print("[补给] 用户取消, 离开!"); break
 
-            # 食用
-            print(f"[补给] 食用 {choice['name']}...")
-            cx2, cy2 = choice["x"], choice["y"]
-            lp = _wa.MAKELONG(cx2, cy2)
-            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp)
-            time.sleep(0.05)
-            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
-            print(f"[补给] 已点击 ({cx2},{cy2}), 等待8秒...")
-            virt_hunger += choice['food']
-            virt_thirst += choice['water']
-            consumed_food_total += choice['food']
-            consumed_water_total += choice['water']
-            eat_count += 1
-            time.sleep(8.0)
+            # 食用 (模拟模式跳过)
+            if not is_simulate:
+                print(f"[补给] 食用 {choice['name']}...")
+                cx2, cy2 = choice["x"], choice["y"]
+                lp = _wa.MAKELONG(cx2, cy2)
+                _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp)
+                time.sleep(0.05)
+                _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
+                print(f"[补给] 已点击 ({cx2},{cy2}), 等待8秒...")
+                virt_hunger += choice['food']
+                virt_thirst += choice['water']
+                consumed_food_total += choice['food']
+                consumed_water_total += choice['water']
+                eat_count += 1
+                time.sleep(8.0)
 
             # 每3次食用后强制离开火堆再进入(防使用限制)
             if eat_count >= 3:
