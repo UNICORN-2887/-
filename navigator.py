@@ -740,6 +740,8 @@ class Navigator:
                 time.sleep(3.0)
                 # 重新进入火堆 (YOLO检测 + 点击)
                 for attempt2 in range(5):  # 最多5次
+                    # drain OBS再YOLO
+                    for _ in range(5): cap.grab(); cv2.waitKey(1)
                     ret2, f2 = cap.read()
                     if not ret2: continue
                     det2 = self.yolo(f2, verbose=False, conf=0.3)[0]
