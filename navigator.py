@@ -1940,9 +1940,9 @@ def main():
             break
 
         # 缩放
-        elif key == ord('.') or key == ord('>'):
+        elif key in (ord('+'), ord('=')):
             nav.scale = min(3.0, nav.scale * 1.15)
-        elif key == ord(',') or key == ord('<'):
+        elif key in (ord('-'), ord('_')):
             nav.scale = max(0.03, nav.scale / 1.15)
 
         # 平移
