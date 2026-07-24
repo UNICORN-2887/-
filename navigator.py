@@ -2222,9 +2222,15 @@ def main():
     cv2.namedWindow("Status", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Status", 960, 540)
 
-    # === Config Window (Canvas-based sliders) ===
-    cv2.namedWindow("Config", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("Config", 650, 750)
+    # === Config Web Server ===
+    try:
+        from config_server import start as start_cfg_server
+        start_cfg_server()
+    except Exception as e:
+        print(f"[Config] Web server failed: {e}")
+
+    # === Config cv2 Window removed (use web panel instead) ===
+    CFG_JSON = os.path.join(os.path.dirname(__file__), "navigator_config.json")
     cfg_mouse = {"dragging": False, "idx": -1}
 
     def cfg_on_mouse(event, sx, sy, flags, param):
@@ -2302,49 +2308,30 @@ def main():
                 nav._last_frame = sf
         status_canvas = nav.render_status()
         cv2.imshow("Status", status_canvas)
-        # Config slider值 → 同步到navigator
-        cv = cfg_values
-        if "WP Reach(px)" in cv: globals()['WAYPOINT_REACH_THRESHOLD'] = cv["WP Reach(px)"]
-        if "Deviation(px)" in cv: globals()['PATH_DEVIATION_THRESHOLD'] = cv["Deviation(px)"]
-        if "Move Dur(s)" in cv: globals()['MOVE_DURATION'] = cv["Move Dur(s)"]
-        if "Goal Reach(px)" in cv: globals()['GOAL_REACH_THRESHOLD'] = cv["Goal Reach(px)"]
-        if "Lookahead(px)" in cv: globals()['LOOKAHEAD_DIST'] = cv["Lookahead(px)"]
-        if "Zombie Rng(px)" in cv: nav.ZOMBIE_THRESHOLD = cv["Zombie Rng(px)"]
-        if "Attack Rng(px)" in cv: nav.ATTACK_RANGE = cv["Attack Rng(px)"]
-        if "Chase Time(s)" in cv: nav.CHASE_TIMEOUT = cv["Chase Time(s)"]
-        if "Low Stat Thr" in cv: nav.LOW_STAT_THRESHOLD = cv["Low Stat Thr"]
-        if "Heal HP%" in cv: nav.HEAL_THRESHOLD = cv["Heal HP%"]
-        if "Escape HP%" in cv: nav.ESCAPE_THRESHOLD = cv["Escape HP%"]
-        if "W Tol" in cv: nav.WEAPON_TOLERANCE = cv["W Tol"]
-        if "W Thr" in cv: nav.WEAPON_EMPTY_THRESHOLD = cv["W Thr"]
-        if "W Check(s)" in cv: nav.WEAPON_CHECK_INTERVAL = cv["W Check(s)"]
-        if "Combat Entry HP%" in cv: nav.COMBAT_ENTRY_HP = cv["Combat Entry HP%"]
-        if "Max Zombies" in cv: nav.COMBAT_ENTRY_MAX_ZOMBIES = cv["Max Zombies"]
-
-        # Render Config window
-        cfg_canvas = np.zeros((750, 650, 3), dtype=np.uint8)
-        F = cv2.FONT_HERSHEY_SIMPLEX
-        y = 18
-        last_sec = ""
-        for i, (name, _, vmin, vmax, _, _, desc, sec) in enumerate(cfg_sliders):
-            if sec != last_sec:
-                cv2.putText(cfg_canvas, f"[ {sec} ]", (10, y), F, 0.55, (0, 255, 255), 2)
-                y += 24; last_sec = sec
-            val = cfg_values.get(name, vmin)
-            pct = (val - vmin) / (vmax - vmin) if vmax > vmin else 0
-            bar_x, bar_y, bar_w, bar_h = 10, y, 220, 16
-            cfg_sliders[i] = (name, bar_y + bar_h//2, vmin, vmax, bar_x, bar_w, desc, sec)
-            # 滑块
-            cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (50, 50, 50), -1)
-            cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (120, 120, 120), 1)
-            fill_w = int(bar_w * pct)
-            cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + fill_w, bar_y + bar_h), (0, 220, 0), -1)
-            cv2.putText(cfg_canvas, f"{name}: {val}", (240, y + 13), F, 0.4, (220, 220, 220), 1)
-            cv2.putText(cfg_canvas, desc, (240, y + 28), F, 0.32, (160, 160, 160), 1)
-            y += 36
-        cv2.putText(cfg_canvas, "Drag green bars to adjust | Values sync to navigator in real-time",
-                   (10, 735), F, 0.32, (150, 150, 150), 1)
-        cv2.imshow("Config", cfg_canvas)
+        # Config: 从web面板JSON读取最新值
+        if os.path.exists(CFG_JSON):
+            try:
+                with open(CFG_JSON) as f:
+                    wcfg = json.load(f)
+                if "waypoint_reach" in wcfg:
+                    globals()['WAYPOINT_REACH_THRESHOLD'] = int(wcfg["waypoint_reach"])
+                    globals()['PATH_DEVIATION_THRESHOLD'] = int(wcfg["deviation"])
+                    globals()['MOVE_DURATION'] = float(wcfg["move_dur"])
+                    globals()['GOAL_REACH_THRESHOLD'] = int(wcfg["goal_reach"])
+                    globals()['LOOKAHEAD_DIST'] = int(wcfg["lookahead"])
+                    nav.ZOMBIE_THRESHOLD = int(wcfg["zombie_range"])
+                    nav.ATTACK_RANGE = int(wcfg["attack_range"])
+                    nav.CHASE_TIMEOUT = int(wcfg["chase_timeout"])
+                    nav.COMBAT_ENTRY_HP = int(wcfg["combat_entry_hp"])
+                    nav.COMBAT_ENTRY_MAX_ZOMBIES = int(wcfg["max_zombies"])
+                    nav.LOW_STAT_THRESHOLD = int(wcfg["low_stat_thr"])
+                    nav.HEAL_THRESHOLD = int(wcfg["heal_hp"])
+                    nav.ESCAPE_THRESHOLD = int(wcfg["escape_hp"])
+                    nav.WEAPON_TOLERANCE = int(wcfg["weapon_tol"])
+                    nav.WEAPON_EMPTY_THRESHOLD = float(wcfg["weapon_thr"])
+                    nav.WEAPON_CHECK_INTERVAL = int(wcfg["weapon_check"])
+            except Exception:
+                pass
 
         key = cv2.waitKey(30) & 0xFF
 
