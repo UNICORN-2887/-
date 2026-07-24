@@ -746,6 +746,9 @@ class Navigator:
                         time.sleep(0.05)
                         _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp3)
                         time.sleep(1.5)
+                        # drain OBS缓冲再检测
+                        for _ in range(5):
+                            cap.grab(); cv2.waitKey(1)
                         if self._confirm_open():
                             print("[补给] 重新进入火堆成功!")
                             eat_count = 0
