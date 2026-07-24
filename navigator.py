@@ -746,7 +746,7 @@ class Navigator:
                     self.goal = self.waypoints[0]
                     self.wp_index = 0
                     self.plan_path()
-                    self.state = self.STATE_READY
+                    self.state = self.STATE_NAVIGATING
                     self.returning_home = False
             else:
                 print(f"[补给完成] 状态一般, 返回巡逻")
@@ -756,7 +756,7 @@ class Navigator:
                 if self._patrol_start and self.waypoints:
                     self.goal = self.waypoints[0]; self.wp_index = 0
                     self.plan_path()
-                    self.state = self.STATE_READY
+                    self.state = self.STATE_NAVIGATING
                     self.returning_home = False
 
     # ----------------------------------------------------------
@@ -1220,7 +1220,7 @@ class Navigator:
                 if self._patrol_start and self.waypoints:
                     self.goal = self.waypoints[0]; self.wp_index = 0
                     self.plan_path()
-                    self.state = self.STATE_READY
+                    self.state = self.STATE_NAVIGATING
                     self.returning_home = False
 
         # ★ 战斗中: 完全跳过导航逻辑 (偏离/途径点/寻路)
