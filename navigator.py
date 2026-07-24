@@ -699,8 +699,6 @@ class Navigator:
             time.sleep(0.05)
             _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
             print(f"[补给] 已点击 ({cx2},{cy2}), 等待8秒...")
-
-            # 更新虚拟值
             virt_hunger += choice['food']
             virt_thirst += choice['water']
             consumed_food_total += choice['food']
