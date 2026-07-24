@@ -487,6 +487,56 @@ class Navigator:
         self._supply_loop(base_dir)
 
     # ----------------------------------------------------------
+    def _fire_camp_interact_no_supply(self):
+        """武器耗尽进入火堆 — 只进入不补给"""
+        import random
+        if not self.yolo or not self._game_hwnd: return
+        base_dir = os.path.dirname(__file__)
+        offset_file = os.path.join(base_dir, 'AImaneuver', 'click_offset.json')
+        dx, dy = 0, 0
+        if os.path.exists(offset_file):
+            off = json.load(open(offset_file))
+            dx, dy = off.get('dx', 0), off.get('dy', 0)
+        # YOLO检测火堆
+        best_cx, best_cy = None, None
+        for _ in range(5):
+            ret, frame = self.tracker.cap.read()
+            if not ret: continue
+            det = self.yolo(frame, verbose=False, conf=0.3)[0]
+            for b in det.boxes:
+                if self.yolo.names[int(b.cls[0])].lower() == 'campfire':
+                    x1, y1, x2, y2 = map(int, b.xyxy[0])
+                    best_cx = (x1 + x2) // 2; best_cy = (y1 + y2) // 2
+                    break
+            if best_cx is not None: break
+            time.sleep(0.3)
+        if best_cx is None: return
+        # 点击直到进入
+        for i in range(8):
+            rx = best_cx + dx + random.randint(-100, 100)
+            ry = best_cy + dy + random.randint(-100, 100)
+            lp = _wa.MAKELONG(rx, ry)
+            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONDOWN, 0, lp)
+            time.sleep(0.05)
+            _wa.SendMessage(self._game_hwnd, _wc.WM_LBUTTONUP, 0, lp)
+            time.sleep(1.5)
+            if self._confirm_open():
+                print(f"\n{'='*60}")
+                print(f"  !! 武器耗尽, 已进入火堆, 程序终止 !!")
+                print(f"  请更换武器后重新运行")
+                print(f"{'='*60}\n")
+                self.status_msg = "!! STOP: 武器耗尽(已在火堆)"
+                self.state = self.STATE_IDLE
+                self.loop_patrol = False
+                return
+        print(f"\n{'='*60}")
+        print(f"  !! 武器耗尽, 进火堆失败, 程序终止 !!")
+        print(f"{'='*60}\n")
+        self.status_msg = "!! STOP: 武器耗尽(进火堆失败)"
+        self.state = self.STATE_IDLE
+        self.loop_patrol = False
+
+    # ----------------------------------------------------------
     def _confirm_open(self):
         """OCR确认火堆界面'开'字 (使用标定的Open ROI)"""
         if not HAS_TESSERACT: return True  # 无Tesseract则跳过
@@ -1412,16 +1462,16 @@ class Navigator:
             hx, hy = self.home
             d_home = np.hypot(px - hx, py - hy)
             if d_home < HOME_REACH:
-                # 武器耗尽返航: 到火堆直接停止, 不补给
+                # 武器耗尽返航: 先进火堆, 再停止
                 if self._weapon_stop:
                     print(f"\n{'='*60}")
-                    print(f"  !! 武器耗尽, 程序终止 !!")
-                    print(f"  请更换武器后重新运行")
+                    print(f"  !! 武器耗尽, 进入火堆 !!")
                     print(f"{'='*60}\n")
-                    self.status_msg = "!! STOP: 武器耗尽"
+                    self.status_msg = "武器耗尽, 进入火堆..."
                     self.state = self.STATE_IDLE
-                    self.loop_patrol = False
                     self.returning_home = False
+                    # 进入火堆后停止, 不补给
+                    self._fire_camp_interact_no_supply()
                     return
                 print(f"\n{'='*40}\n[返航] 距火堆{d_home:.0f}px, 触发火堆交互\n{'='*40}")
                 self.state = self.STATE_IDLE
