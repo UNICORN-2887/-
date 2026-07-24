@@ -777,6 +777,8 @@ class Navigator:
                             if h2: virt_hunger = h2
                             if t2: virt_thirst = t2
                             break
+                        # 未检测到, 等2秒再下一次尝试
+                        time.sleep(2.0)
                     if eat_count == 0:
                         # 重置累计值(新火堆会话)
                         consumed_food_total = 0
