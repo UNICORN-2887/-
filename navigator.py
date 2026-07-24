@@ -1227,9 +1227,9 @@ class Navigator:
         if self.combat_state is not None:
             return
 
-        # 2. 返航模式才触发火堆交互
+        # 2. 仅手动H返航才自动进入火堆 (自动返航不进入)
         HOME_REACH = int(GOAL_REACH_THRESHOLD * 1.5)
-        if self.returning_home and self.home:
+        if self.returning_home and self.home and getattr(self, '_manual_home', False):
             hx, hy = self.home
             d_home = np.hypot(px - hx, py - hy)
             if d_home < HOME_REACH:
@@ -1997,6 +1997,7 @@ def main():
                 nav.start = nav.position if nav.position else nav.start
                 if nav.plan_path():
                     nav.returning_home = True
+                    nav._manual_home = True
                     print(f"[返航] → 火堆 {nav.home}")
 
         # 1/2/3/4 = 手动释放技能 (测试)
