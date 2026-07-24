@@ -137,9 +137,8 @@ while True:
 
     # 调节提示
     y_b = 450
-    cv2.putText(canvas, f"Ref RGB: {EMPTY_RGB}", (10, y_b), FONT, 0.35, (200, 200, 200), 1)
-    cv2.putText(canvas, f"Tol={TOLERANCE} (R/F)  Thr={EMPTY_THRESHOLD} (T/G)",
-               (10, y_b + 20), FONT, 0.35, (150, 150, 150), 1)
+    cv2.putText(canvas, "R/F=Tol T/G=Thr IJKL=move SHIFT+IJKL=resize O=org C=detect Q=quit",
+               (10, 515), FONT, 0.3, (150, 150, 150), 1)
     cv2.putText(canvas, status, (10, 540), FONT, 0.35, (255, 255, 255), 1)
 
     cv2.imshow("WeaponDetect", canvas)
