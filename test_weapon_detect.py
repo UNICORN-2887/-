@@ -18,8 +18,17 @@ ROI = [1300, 838, 30, 30]  # x, y, w, h
 
 # 空槽参考颜色 RGB
 EMPTY_RGB = (80, 39, 19)
-TOLERANCE = 40  # 色差容忍度
+TOLERANCE = 20  # 色差容忍度
 EMPTY_THRESHOLD = 0.3  # 空槽像素占比>此值=空
+SAVE_FILE = os.path.join(BASE, "weapon_roi.json")
+
+# 加载已保存的ROI
+if os.path.exists(SAVE_FILE):
+    saved = json.load(open(SAVE_FILE))
+    ROI = saved.get("roi", ROI)
+    TOLERANCE = saved.get("tol", TOLERANCE)
+    EMPTY_THRESHOLD = saved.get("thr", EMPTY_THRESHOLD)
+    print(f"[加载] ROI={ROI} Tol={TOLERANCE} Thr={EMPTY_THRESHOLD}")
 
 # ---- 找游戏窗口 ----
 def find_game():
@@ -173,6 +182,11 @@ while True:
     # 调阈值
     elif key in (ord('t'), ord('T')): EMPTY_THRESHOLD = min(0.9, EMPTY_THRESHOLD + 0.05)
     elif key in (ord('g'), ord('G')): EMPTY_THRESHOLD = max(0.05, EMPTY_THRESHOLD - 0.05)
+    # S = 保存
+    elif key in (ord('s'), ord('S')):
+        json.dump({"roi": ROI, "tol": TOLERANCE, "thr": EMPTY_THRESHOLD},
+                  open(SAVE_FILE, 'w'))
+        print(f"[保存] ROI={ROI} Tol={TOLERANCE} Thr={EMPTY_THRESHOLD}")
 
 cap.release()
 cv2.destroyAllWindows()
