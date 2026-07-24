@@ -2224,12 +2224,12 @@ def main():
 
     # === Config Window (Canvas-based sliders) ===
     cv2.namedWindow("Config", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("Config", 500, 620)
+    cv2.resizeWindow("Config", 550, 650)
     cfg_mouse = {"dragging": False, "idx": -1}
 
     def cfg_on_mouse(event, sx, sy, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
-            for i, (_, ypos, _, _, _) in enumerate(cfg_sliders):
+            for i, (_, ypos, _, _, _, _, _, _) in enumerate(cfg_sliders):
                 if ypos - 5 <= sy <= ypos + 15:
                     cfg_mouse["dragging"] = True
                     cfg_mouse["idx"] = i
@@ -2240,7 +2240,7 @@ def main():
         elif event == cv2.EVENT_MOUSEMOVE and cfg_mouse["dragging"]:
             i = cfg_mouse["idx"]
             if 0 <= i < len(cfg_sliders):
-                name, ypos, vmin, vmax, bar_x, bar_w = cfg_sliders[i]
+                name, ypos, vmin, vmax, bar_x, bar_w, _, _ = cfg_sliders[i]
                 pct = max(0, min(1, (sx - bar_x) / bar_w))
                 val = vmin + pct * (vmax - vmin)
                 # 整数参数
@@ -2322,30 +2322,28 @@ def main():
         if "Max Zombies" in cv: nav.COMBAT_ENTRY_MAX_ZOMBIES = cv["Max Zombies"]
 
         # Render Config window
-        cfg_canvas = np.zeros((620, 500, 3), dtype=np.uint8)
+        cfg_canvas = np.zeros((650, 550, 3), dtype=np.uint8)
         F = cv2.FONT_HERSHEY_SIMPLEX
         y = 15
         last_sec = ""
         for i, (name, _, vmin, vmax, _, _, desc, sec) in enumerate(cfg_sliders):
             if sec != last_sec:
-                cv2.putText(cfg_canvas, f"-- {sec} --", (10, y), F, 0.4, (0, 255, 255), 1)
-                y += 18; last_sec = sec
+                cv2.putText(cfg_canvas, f"-- {sec} --", (10, y), F, 0.5, (0, 255, 255), 1)
+                y += 20; last_sec = sec
             val = cfg_values.get(name, vmin)
             pct = (val - vmin) / (vmax - vmin) if vmax > vmin else 0
-            bar_x, bar_y, bar_w, bar_h = 10, y, 200, 12
+            bar_x, bar_y, bar_w, bar_h = 10, y, 180, 14
             cfg_sliders[i] = (name, bar_y + bar_h//2, vmin, vmax, bar_x, bar_w, desc, sec)
-            # 滑块背景
+            # 滑块
             cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (60, 60, 60), -1)
             cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (100, 100, 100), 1)
-            # 滑块填充
             fill_w = int(bar_w * pct)
             cv2.rectangle(cfg_canvas, (bar_x, bar_y), (bar_x + fill_w, bar_y + bar_h), (0, 200, 0), -1)
-            # 文字
-            cv2.putText(cfg_canvas, f"{name}: {val}", (220, y + 10), F, 0.3, (200, 200, 200), 1)
-            cv2.putText(cfg_canvas, desc, (220, y + 24), F, 0.22, (120, 120, 120), 1)
-            y += 30
-        cv2.putText(cfg_canvas, "Drag sliders to adjust | Close window to hide",
-                   (10, 605), F, 0.25, (150, 150, 150), 1)
+            cv2.putText(cfg_canvas, f"{name}: {val}", (200, y + 11), F, 0.35, (200, 200, 200), 1)
+            cv2.putText(cfg_canvas, desc, (200, y + 25), F, 0.28, (140, 140, 140), 1)
+            y += 32
+        cv2.putText(cfg_canvas, "Drag green bars to adjust values",
+                   (10, 640), F, 0.3, (150, 150, 150), 1)
         cv2.imshow("Config", cfg_canvas)
 
         key = cv2.waitKey(30) & 0xFF
