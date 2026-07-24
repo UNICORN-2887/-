@@ -297,6 +297,7 @@ class Navigator:
         self._roi_edit = False       # True=编辑模式
         self._roi_sel = 0            # 当前选中的ROI索引
         self._roi_list = []          # [(name,x,y,w,h), ...] 可编辑ROI列表
+        self._cfg_sel = 0            # 当前选中的配置参数索引
 
         # 中键拖拽
         self._dragging = False
@@ -1795,6 +1796,29 @@ class Navigator:
         else:
             cv2.putText(canvas, "  (none)", (rx, y), FONT, 0.3, (150, 150, 150), 1)
 
+        # ---- 配置参数 ----
+        y = SH - 130
+        cv2.putText(canvas, "Config (F=sel +/-=adj):", (rx, y),
+                   FONT, 0.3, (150, 150, 150), 1)
+        y += 12
+        cfgs = [
+            ("WP Reach", WAYPOINT_REACH_THRESHOLD),
+            ("Deviation", PATH_DEVIATION_THRESHOLD),
+            ("Move Dur", MOVE_DURATION),
+            ("Goal Reach", GOAL_REACH_THRESHOLD),
+            ("Lookahead", LOOKAHEAD_DIST),
+            ("Zombie Rng", self.ZOMBIE_THRESHOLD),
+            ("Attack Rng", self.ATTACK_RANGE),
+            ("Chase s", self.CHASE_TIMEOUT),
+            ("Low Stat", self.LOW_STAT_THRESHOLD),
+        ]
+        for i, (cn, cv) in enumerate(cfgs):
+            col = (0, 255, 255) if i == self._cfg_sel else (150, 150, 150)
+            mark = ">" if i == self._cfg_sel else " "
+            cv2.putText(canvas, f"{mark}{cn}: {cv}", (rx, y),
+                       FONT, 0.25, col, 1)
+            y += 11
+
         return canvas
 
     # ----------------------------------------------------------
@@ -2025,13 +2049,71 @@ def main():
             nav.status_msg = "Reset, 请重新设定起点/途径点/终点"
             print("[重置] 起点/waypoints/goal/path cleared")
 
-        # O/P = 调整Return threshold
-        elif key in (ord('o'), ord('O')):
-            nav.LOW_STAT_THRESHOLD = min(100, nav.LOW_STAT_THRESHOLD + 5)
-            print(f"[Thr] Return: <{nav.LOW_STAT_THRESHOLD}")
-        elif key in (ord('p'), ord('P')):
-            nav.LOW_STAT_THRESHOLD = max(1, nav.LOW_STAT_THRESHOLD - 5)
-            print(f"[Thr] Return: <{nav.LOW_STAT_THRESHOLD}")
+        # F = 切换配置参数 / +/- = 调整
+        elif key in (ord('f'), ord('F')):
+            nav._cfg_sel = (nav._cfg_sel + 1) % 9
+            cfgs = [("WP Reach", WAYPOINT_REACH_THRESHOLD, 5),
+                    ("Deviation", PATH_DEVIATION_THRESHOLD, 10),
+                    ("Move Dur", MOVE_DURATION, 0.1),
+                    ("Goal Reach", GOAL_REACH_THRESHOLD, 10),
+                    ("Lookahead", LOOKAHEAD_DIST, 10),
+                    ("Zombie Rng", nav.ZOMBIE_THRESHOLD, 50),
+                    ("Attack Rng", nav.ATTACK_RANGE, 10),
+                    ("Chase s", nav.CHASE_TIMEOUT, 2),
+                    ("Low Stat", nav.LOW_STAT_THRESHOLD, 5)]
+            print(f"[CFG] {cfgs[nav._cfg_sel][0]} = {cfgs[nav._cfg_sel][1]}")
+        elif key in (ord('+'), ord('=')):
+            cfgs = [("WP Reach", WAYPOINT_REACH_THRESHOLD, 5, 'global'),
+                    ("Deviation", PATH_DEVIATION_THRESHOLD, 10, 'global'),
+                    ("Move Dur", MOVE_DURATION, 0.1, 'global'),
+                    ("Goal Reach", GOAL_REACH_THRESHOLD, 10, 'global'),
+                    ("Lookahead", LOOKAHEAD_DIST, 10, 'global'),
+                    ("Zombie Rng", 'ZOMBIE_THRESHOLD', 50, 'attr'),
+                    ("Attack Rng", 'ATTACK_RANGE', 10, 'attr'),
+                    ("Chase s", 'CHASE_TIMEOUT', 2, 'attr'),
+                    ("Low Stat", 'LOW_STAT_THRESHOLD', 5, 'attr')]
+            if nav._cfg_sel < len(cfgs):
+                nm, _, step, tp = cfgs[nav._cfg_sel]
+                if tp == 'attr':
+                    setattr(nav, nm[0] if isinstance(nm, str) else nm,
+                            getattr(nav, nm[0] if isinstance(nm, str) else nm) + step)
+                elif nm == 'WAYPOINT_REACH_THRESHOLD':
+                    globals()['WAYPOINT_REACH_THRESHOLD'] += step
+                elif nm == 'PATH_DEVIATION_THRESHOLD':
+                    globals()['PATH_DEVIATION_THRESHOLD'] += step
+                elif nm == 'MOVE_DURATION':
+                    globals()['MOVE_DURATION'] += step
+                elif nm == 'GOAL_REACH_THRESHOLD':
+                    globals()['GOAL_REACH_THRESHOLD'] += step
+                elif nm == 'LOOKAHEAD_DIST':
+                    globals()['LOOKAHEAD_DIST'] += step
+                print(f"[CFG] {nm} += {step}")
+        elif key in (ord('-'), ord('_')):
+            cfgs = [("WP Reach", WAYPOINT_REACH_THRESHOLD, 5, 'global'),
+                    ("Deviation", PATH_DEVIATION_THRESHOLD, 10, 'global'),
+                    ("Move Dur", MOVE_DURATION, 0.1, 'global'),
+                    ("Goal Reach", GOAL_REACH_THRESHOLD, 10, 'global'),
+                    ("Lookahead", LOOKAHEAD_DIST, 10, 'global'),
+                    ("Zombie Rng", 'ZOMBIE_THRESHOLD', 50, 'attr'),
+                    ("Attack Rng", 'ATTACK_RANGE', 10, 'attr'),
+                    ("Chase s", 'CHASE_TIMEOUT', 2, 'attr'),
+                    ("Low Stat", 'LOW_STAT_THRESHOLD', 5, 'attr')]
+            if nav._cfg_sel < len(cfgs):
+                nm, _, step, tp = cfgs[nav._cfg_sel]
+                if tp == 'attr':
+                    an = nm
+                    setattr(nav, an, max(1, getattr(nav, an) - step))
+                elif nm == 'WAYPOINT_REACH_THRESHOLD':
+                    globals()['WAYPOINT_REACH_THRESHOLD'] = max(1, WAYPOINT_REACH_THRESHOLD - step)
+                elif nm == 'PATH_DEVIATION_THRESHOLD':
+                    globals()['PATH_DEVIATION_THRESHOLD'] = max(1, PATH_DEVIATION_THRESHOLD - step)
+                elif nm == 'MOVE_DURATION':
+                    globals()['MOVE_DURATION'] = max(0.05, MOVE_DURATION - step)
+                elif nm == 'GOAL_REACH_THRESHOLD':
+                    globals()['GOAL_REACH_THRESHOLD'] = max(1, GOAL_REACH_THRESHOLD - step)
+                elif nm == 'LOOKAHEAD_DIST':
+                    globals()['LOOKAHEAD_DIST'] = max(1, LOOKAHEAD_DIST - step)
+                print(f"[CFG] {nm} -= {step}")
 
         # U = 切换ROI编辑模式
         elif key in (ord('u'), ord('U')):
