@@ -2133,7 +2133,7 @@ def main():
                 nav.state = nav.STATE_NAVIGATING
                 nav.returning_home = False
                 print("[导航] 开始!")
-                # 预加载状态OCR (避免首次读取延迟)
+                # 预加载状态OCR + 立即读一次
                 if nav._ocr_en is None and nav.tracker and nav.tracker.cap:
                     try:
                         import easyocr
