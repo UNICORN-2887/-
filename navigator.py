@@ -934,7 +934,7 @@ class Navigator:
                         blocked += 1
             if total > 2:
                 best_ratio = min(best_ratio, blocked / total)
-        return best_ratio > 0.5  # >50%不可达=有墙
+        return best_ratio > 0.7  # >70%不可达=有墙
 
     def _find_nearest_waypoint_idx(self, px, py):
         """找离当前位置直线距离最近的途径点索引"""

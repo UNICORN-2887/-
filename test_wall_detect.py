@@ -81,7 +81,7 @@ def is_blocked(zx, zy):
                     blocked += 1
         if total > 2:
             best_ratio = min(best_ratio, blocked / total)
-    return best_ratio > 0.5, best_ratio
+    return best_ratio > 0.7, best_ratio
 
 last_print_time = 0
 def print_zombie_debug(zombies):
