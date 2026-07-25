@@ -2188,7 +2188,7 @@ def main():
 
     # 技能冷却从web面板或skill_cooldowns.json加载 (无终端输入)
     cd_file = os.path.join(os.path.dirname(__file__), 'skill_cooldowns.json')
-    default_cds = [3, 5, 8, 12]
+    default_cds = [4, 12, 22, 32]
     if os.path.exists(cd_file):
         try:
             saved = json.load(open(cd_file))

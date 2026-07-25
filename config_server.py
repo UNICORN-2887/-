@@ -12,7 +12,7 @@ DEFAULTS = {
     "heal_hp": 80, "escape_hp": 20, "combat_entry_hp": 70,
     "max_zombies": 6, "weapon_tol": 20, "weapon_thr": 0.3,
     "weapon_check": 15, "return_thr": 15,
-    "skill1_cd": 3, "skill2_cd": 5, "skill3_cd": 8, "skill4_cd": 12,
+    "skill1_cd": 4, "skill2_cd": 12, "skill3_cd": 22, "skill4_cd": 32,
 }
 
 def load_cfg():
