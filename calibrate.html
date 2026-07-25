@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>DeadMaze 标定中心</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:13px 'Microsoft YaHei',Arial,sans-serif;background:#1a1a2e;color:#eee;display:flex;height:100vh}
+#view{flex:1;overflow:auto;background:#0a0a0f;position:relative}
+canvas{display:block;cursor:crosshair}
+#bar{width:380px;background:#1e1e2e;display:flex;flex-direction:column;border-left:2px solid#333}
+#bar-head{padding:14px 14px 8px;border-bottom:1px solid#333}
+#bar-head h2{color:#0ff;font-size:17px;margin-bottom:2px}
+#bar-head .tip{color:#888;font-size:11px}
+#bar-body{flex:1;overflow-y:auto;padding:6px 14px 14px}
+.btn{display:block;width:100%;padding:10px;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-family:inherit;margin:6px 0;text-align:center}
+.btn-cap{background:#09f;color:#fff}
+.btn-save{background:#0a0;color:#fff;font-size:15px;padding:12px}
+.btn-reset{background:#a30;color:#fff;font-size:11px;padding:6px}
+.btn-nav{background:#555;color:#ccc;font-size:11px;padding:6px}
+.group{margin:8px 0}
+.group-tit{color:#0cc;font-size:11px;text-transform:uppercase;letter-spacing:2px;margin:10px 0 4px;padding-bottom:2px;border-bottom:1px solid#2a2a3a}
+.card{padding:8px 10px;margin:3px 0;border-radius:4px;cursor:pointer;border-left:3px solid transparent;transition:background .15s;background:#252535}
+.card:hover{background:#2d2d42}
+.card.sel{border-left-color:#0f0!important;background:#1a2a1a}
+.card .n{font-weight:bold;font-size:12px;display:flex;align-items:center;gap:5px}
+.card .d{color:#999;font-size:10px;margin:2px 0}
+.card .v{font-family:monospace;font-size:11px;color:#aaa;margin:2px 0}
+.card .v b{color:#0f0;font-weight:normal}
+.card .res{font-size:11px;margin:3px 0;min-height:17px;word-break:break-all;padding:2px 6px;border-radius:2px;background:#1a1a0a}
+.card .edit{margin-top:4px;display:flex;gap:3px;align-items:center;flex-wrap:wrap}
+.card .edit input{width:46px;background:#1a1a2a;border:1px solid#444;color:#eee;padding:2px 3px;font-size:10px;font-family:monospace;text-align:center;border-radius:2px}
+.card .edit label{font-size:9px;color:#666;min-width:10px}
+.ball{display:inline-block;width:9px;height:9px;border-radius:50%}
+.toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:99;background:rgba(0,0,0,.9);color:#0f0;padding:7px 22px;border-radius:6px;font-size:13px;display:none;pointer-events:none}
+.live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#0f0;animation:pulse 1s infinite;vertical-align:middle;margin-right:4px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+</style>
+</head>
+<body>
+
+<div id="view"><canvas id="c"></canvas></div>
+
+<div id="bar">
+ <div id="bar-head">
+  <h2>标定中心</h2>
+  <div class="tip"><span class="live-dot" id="liveDot" style="display:none"></span>拖拽=移动 | WASD=微调 | Shift=加速</div>
+ </div>
+ <button class="btn btn-nav" onclick="location.href='/'">← 返回配置</button>
+ <div style="display:flex;gap:6px;padding:0 14px">
+  <button class="btn btn-cap" onclick="toggleLive()" id="btnLive" style="flex:1">▶ 实时预览</button>
+  <button class="btn btn-cap" onclick="doCapture()" style="flex:1">📷 单张截图</button>
+ </div>
+ <div class="tip" id="info" style="margin:4px 14px"></div>
+ <div id="bar-body"><div class="tip" style="text-align:center;padding:20px">点击截图按钮开始</div></div>
+ <div style="display:flex;gap:6px;padding:0 14px">
+  <button class="btn btn-save" onclick="doSave()" style="flex:1">💾 保存全部</button>
+  <button class="btn btn-reset" onclick="doReset()" style="flex:1">↺ 重置</button>
+ </div>
+ <div class="tip" style="text-align:center;color:#555;margin-bottom:8px">拖拽=移动 | WASD=微调 | 点卡片=选中</div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+let img=null, roi={}, active='', c, ctx, liveTimer=null;
+let drag=false, dox=0, doy=0;
+
+const CLR={ocr_exp:'#ff0',ocr_hunger:'#f80',ocr_thirst:'#09f',ocr_stamina:'#0f0',
+  ocr_threat:'#f0f',ocr_open:'#0ff', hp:'#f44',weapon:'#fc0',inventory:'#f80',food:'#06f'};
+const DESC={ocr_exp:'经验值 (x=倍率)',ocr_hunger:'饱食度',ocr_thirst:'口渴度',
+  ocr_stamina:'体力值',ocr_threat:'威胁值 (x=倍率)',ocr_open:'火堆"开"字',
+  hp:'血量条绿色占比',weapon:'武器槽颜色匹配',inventory:'背包物品OCR',food:'食物/水OCR'};
+const GRP={'OCR状态':['ocr_exp','ocr_hunger','ocr_thirst','ocr_stamina','ocr_threat','ocr_open'],
+  '战斗':['hp','weapon'],'背包':['inventory','food']};
+
+c=document.getElementById('c'); ctx=c.getContext('2d');
+
+async function api(url,opt){let r=await fetch(url,opt||{});return r.json();}
+
+// === 实时 ===
+async function toggleLive(){
+  if(liveTimer){clearInterval(liveTimer);liveTimer=null;
+    document.getElementById('btnLive').textContent='▶ 实时预览';
+    document.getElementById('liveDot').style.display='none'; return;}
+  liveTimer=setInterval(refreshLive, 2000);
+  document.getElementById('btnLive').textContent='⏸ 停止实时';
+  document.getElementById('liveDot').style.display='inline-block';
+  refreshLive();
+}
+
+async function refreshLive(){
+  try{
+    let j=await api('/api/preview',{method:'POST'});
+    if(j.error)return;
+    if(j.image){img=new Image();img.onload=()=>{c.width=img.width;c.height=img.height;ctx.drawImage(img,0,0);drawAll();};img.src='data:image/jpeg;base64,'+j.image;}
+    updatePreview(j);
+  }catch(e){}
+}
+
+async function doCapture(){
+  if(liveTimer){toggleLive();}
+  let j=await api('/api/preview',{method:'POST'});
+  if(j.error){toast(j.error,'#f44');return}
+  img=new Image();img.onload=()=>{c.width=img.width;c.height=img.height;ctx.drawImage(img,0,0);drawAll();};
+  img.src='data:image/jpeg;base64,'+j.image;
+  updatePreview(j); toast('截图完成');
+}
+
+function updatePreview(j){
+  document.getElementById('info').textContent=img?('分辨率: '+img.width+'×'+img.height):'';
+  // 更新OCR结果卡片
+  if(j.ocr){for(let k in j.ocr){let el=document.getElementById('res-'+k);if(el){el.textContent=j.ocr[k]||'(未识别)';el.style.color=j.ocr[k]?'#ff0':'#555';}}}
+  // 更新HP卡片
+  if(j.hp!==undefined){
+    let el=document.getElementById('res-hp'); if(el){el.textContent='HP: '+j.hp+'%';el.style.color=j.hp>0?'#0f0':'#555';}
+  }
+  // 更新Weapon卡片
+  if(j.weapon){
+    let el=document.getElementById('res-weapon'); if(el){el.textContent='状态: '+j.weapon;el.style.color=j.weapon.startsWith('有')?'#0f0':'#f44';}
+  }
+}
+
+// === 重置 ===
+async function doReset(){
+  let j=await api('/api/reset',{method:'POST'});
+  if(j.rois){roi=j.rois; renderCards(); if(img)drawAll(); toast('已重置为本地JSON值');}
+}
+
+// === 绘制 (仅边框) ===
+function drawAll(){
+  if(!img)return;
+  ctx.drawImage(img,0,0);
+  for(let k in roi){
+    let v=getR(k); if(!v||v[2]<1||v[3]<1)continue;
+    let[x,y,w,h]=v, co=CLR[k]||'#888', sel=k===active;
+    ctx.strokeStyle=co; ctx.lineWidth=sel?3:1.5;
+    ctx.strokeRect(x,y,w,h);
+    let lb=k.replace('ocr_','').toUpperCase();
+    ctx.fillStyle=co; ctx.font='bold 10px monospace';
+    let ty=y-4; if(ty<12)ty=y+h+13;
+    ctx.fillText(lb,x+2,ty);
+    if(sel){ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.setLineDash([4,2]);
+      ctx.strokeRect(x-1,y-1,w+2,h+2);ctx.setLineDash([]);}
+  }
+}
+
+function getR(k){let d=roi[k];if(!d)return null;if(Array.isArray(d)&&d.length>=4)return d;if(d.roi&&Array.isArray(d.roi))return d.roi;return null;}
+
+function cp(e){let r=c.getBoundingClientRect();return {x:(e.clientX-r.left)*(c.width/r.width), y:(e.clientY-r.top)*(c.height/r.height)};}
+
+// === 拖拽 ===
+c.onmousedown=e=>{if(!img||!active)return;let p=cp(e),v=getR(active);if(!v)return;let[x,y,w,h]=v;if(p.x>=x&&p.x<=x+w&&p.y>=y&&p.y<=y+h){drag=true;dox=p.x-x;doy=p.y-y;c.style.cursor='grabbing';}};
+c.onmousemove=e=>{if(!drag)return;let p=cp(e),v=getR(active);if(!v)return;v[0]=Math.round(p.x-dox);v[1]=Math.round(p.y-doy);drawAll();updateCardInputs(active);};
+c.onmouseup=()=>{drag=false;c.style.cursor='crosshair';};
+c.onmouseleave=()=>{drag=false;c.style.cursor='crosshair';};
+
+// === 键盘 ===
+document.addEventListener('keydown',e=>{if(!active||!img)return;if(document.activeElement&&document.activeElement.tagName==='INPUT')return;let v=getR(active);if(!v)return;let s=e.shiftKey?10:1,h=true;switch(e.key){case'w':case'ArrowUp':v[1]-=s;break;case's':case'ArrowDown':v[1]+=s;break;case'a':case'ArrowLeft':v[0]-=s;break;case'd':case'ArrowRight':v[0]+=s;break;default:h=false;}if(h){e.preventDefault();drawAll();updateCardInputs(active);}});
+
+function selectROI(k){active=k;renderCards();if(img)drawAll();}
+
+function updateCardInputs(k){
+  let el=document.getElementById('card-'+k);if(!el)return;
+  let d=getR(k);if(!d)return;
+  el.querySelector('.v').innerHTML='[<b>'+d[0]+'</b>, <b>'+d[1]+'</b> <b>'+d[2]+'</b>×<b>'+d[3]+'</b>]';
+  let inps=el.querySelectorAll('input');if(inps.length>=4){inps[0].value=d[0];inps[1].value=d[1];inps[2].value=d[2];inps[3].value=d[3];}
+}
+
+function updateRoiNum(k,i,v){let d=getR(k);if(!d)return;d[i]=parseInt(v)||0;updateCardInputs(k);if(img)drawAll();}
+
+function renderCards(){
+  let h='';
+  for(let gn in GRP){
+    h+='<div class="group"><div class="group-tit">'+gn+'</div>';
+    for(let k of GRP[gn]){
+      let v=getR(k), co=CLR[k]||'#888', sel=k===active;
+      let vt=v?'[<b>'+v[0]+'</b>, <b>'+v[1]+'</b> <b>'+v[2]+'</b>×<b>'+v[3]+'</b>]':'未标定';
+      h+='<div class="card'+(sel?' sel':'')+'" id="card-'+k+'" onclick="selectROI(\''+k+'\')" style="border-left-color:'+co+'">';
+      h+='<div class="n"><span class="ball" style="background:'+co+'"></span>'+k.replace('ocr_','').toUpperCase()+'</div>';
+      h+='<div class="d">'+DESC[k]+'</div><div class="v">'+vt+'</div>';
+      // 检测结果行
+      if(k.startsWith('ocr_')){h+='<div class="res" id="res-'+k+'">等待OCR...</div>';}
+      else if(k==='hp'){h+='<div class="res" id="res-hp">等待检测...</div>';}
+      else if(k==='weapon'){h+='<div class="res" id="res-weapon">等待检测...</div>';}
+      else{h+='<div class="res" id="res-'+k+'"></div>';}
+      if(v){
+        h+='<div class="edit" onclick="event.stopPropagation()">';
+        h+='<label>X</label><input value="'+v[0]+'" onchange="updateRoiNum(\''+k+'\',0,this.value)">';
+        h+='<label>Y</label><input value="'+v[1]+'" onchange="updateRoiNum(\''+k+'\',1,this.value)">';
+        h+='<label>W</label><input value="'+v[2]+'" onchange="updateRoiNum(\''+k+'\',2,this.value)">';
+        h+='<label>H</label><input value="'+v[3]+'" onchange="updateRoiNum(\''+k+'\',3,this.value)">';
+        h+='</div>';
+      }
+      if(k==='weapon'&&roi.weapon&&roi.weapon.tol!==undefined){
+        h+='<div style="font-size:10px;color:#555;margin-top:3px" onclick="event.stopPropagation()">';
+        h+='Tol:<input style="width:44px;margin:0 3px" value="'+roi.weapon.tol+'" onchange="roi.weapon.tol=parseInt(this.value)||20">';
+        h+='Thr:<input style="width:44px;margin:0 3px" value="'+roi.weapon.thr+'" onchange="roi.weapon.thr=parseFloat(this.value)||0.3"> (脚本预设)</div>';
+      }
+      h+='</div>';
+    }
+    h+='</div>';
+  }
+  document.getElementById('bar-body').innerHTML=h;
+}
+
+async function doSave(){
+  let j=await api('/api/save_rois',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(roi)});
+  toast('已保存: '+j.saved.join(', '));
+}
+
+function toast(m,c){let t=document.getElementById('toast');t.textContent=m;t.style.display='block';t.style.color=c||'#0f0';setTimeout(()=>t.style.display='none',2000);}
+
+(async function(){roi=await api('/api/rois');renderCards();})();
+</script>
+</body>
+</html>

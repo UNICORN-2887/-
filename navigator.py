@@ -32,6 +32,9 @@ import time
 import heapq
 import json
 import argparse
+import subprocess
+import ctypes
+from ctypes import wintypes
 
 import cv2
 import numpy as np
@@ -278,6 +281,7 @@ class Navigator:
         self.yolo_disp = None       # YOLO检测画面 (缩小后)
         self.status_disp = None     # 状态窗画面(OBS+OCR框)
         self._last_frame = None     # 最新OBS帧
+        self._frame_cnt = 0        # 帧计数器(用于截图共享)
         self.zombie_counts = {}     # 僵尸种类→数量
         self.last_waypoint_time = 0 # 到达途径点的时间戳
         self.loop_patrol = False    # 循环巡逻模式
@@ -307,6 +311,8 @@ class Navigator:
         self._ocr_en = None          # EasyOCR英文(状态读取)
         self._post_supply_check = False  # 补给后检查标志
         self._low_stat_triggered = False  # 低状态返航已触发
+        self._pushplus_token = ""       # PushPlus通知token
+        self._last_push_time = {}         # 限流: {title: timestamp}
         # ROI 编辑模式
         self._roi_edit = False       # True=编辑模式
         self._roi_sel = 0            # 当前选中的ROI索引
@@ -528,6 +534,10 @@ class Navigator:
                 self.status_msg = "!! STOP: 武器耗尽(已在火堆)"
                 self.state = self.STATE_IDLE
                 self.loop_patrol = False
+                self._push_notify("DeadMaze 已停止",
+                    f"武器已耗尽，角色已返回火堆\n"
+                    f"HP={self.hp_pct}% H={self.hunger_val} T={self.thirst_val} S={self.stamina_val}\n"
+                    f"请更换武器后重新运行")
                 return
         print(f"\n{'='*60}")
         print(f"  !! 武器耗尽, 进火堆失败, 程序终止 !!")
@@ -535,6 +545,10 @@ class Navigator:
         self.status_msg = "!! STOP: 武器耗尽(进火堆失败)"
         self.state = self.STATE_IDLE
         self.loop_patrol = False
+        self._push_notify("DeadMaze 已停止",
+            f"武器已耗尽，返回火堆失败!\n"
+            f"HP={self.hp_pct}% H={self.hunger_val} T={self.thirst_val} S={self.stamina_val}\n"
+            f"请手动处理")
 
     # ----------------------------------------------------------
     def _confirm_open(self):
@@ -1153,6 +1167,26 @@ class Navigator:
             self._weapon_empty = True
             print(f"[武器] 检测到空槽! match={match_ratio:.1%}")
 
+    def _push_notify(self, title, content, cooldown=60):
+        """发送PushPlus微信通知 (同title默认60秒内不重复)"""
+        if not self._pushplus_token:
+            return
+        now = time.time()
+        last = self._last_push_time.get(title, 0)
+        if now - last < cooldown:
+            return  # 冷却中, 跳过
+        self._last_push_time[title] = now
+        try:
+            import urllib.request
+            data = json.dumps({"token": self._pushplus_token,
+                               "title": title, "content": content}).encode()
+            req = urllib.request.Request("https://www.pushplus.plus/send",
+                data=data, headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=5)
+            print(f"[PushPlus] 已发送: {title}")
+        except Exception as e:
+            print(f"[PushPlus] 发送失败: {e}")
+
     def _escape_to_waypoint(self, px, py):
         """脱战: 空格 → A*回最近途径点 → 跳过模式下5个点"""
         if self.ctrl:
@@ -1190,6 +1224,9 @@ class Navigator:
 
         # ---- 规则2: 血量过低 ----
         if self.hp_pct < self.ESCAPE_THRESHOLD and self.combat_state is None:
+            self._push_notify("DeadMaze HP过低脱战",
+                f"HP={self.hp_pct}% 低于阈值{self.ESCAPE_THRESHOLD}%，已脱战\n"
+                f"H={self.hunger_val} T={self.thirst_val} S={self.stamina_val} Thr={self.threat_val}")
             self._escape_to_waypoint(px, py)
             return
 
@@ -1198,6 +1235,9 @@ class Navigator:
                 and not self._low_stat_triggered and self.home
                 and self.combat_state is None):
             print(f"[自动返航] Threat={self.threat_val} → 返航补给")
+            self._push_notify("DeadMaze Threat返航",
+                f"Threat={self.threat_val} ≥ 2，自动返航补给\n"
+                f"HP={self.hp_pct}% H={self.hunger_val} T={self.thirst_val} S={self.stamina_val}")
             self._low_stat_triggered = True
             self._post_supply_check = True
             self.returning_home = True
@@ -1239,6 +1279,9 @@ class Navigator:
                 low_stats.append(f"Stamina={self.stamina_val}")
             if low_stats:
                 print(f"[自动返航] 低状态: {', '.join(low_stats)} → 返航补给")
+                self._push_notify("DeadMaze 低状态返航",
+                    f"低状态: {', '.join(low_stats)} < {self.LOW_STAT_THRESHOLD}\n"
+                    f"HP={self.hp_pct}% Thr={self.threat_val} → 返航补给")
                 self._low_stat_triggered = True
                 self._post_supply_check = True
                 self.returning_home = True
@@ -2170,6 +2213,145 @@ class Navigator:
 
 
 # ============================================================
+# 启动器: UAC绕过 (ComputerDefaults/fodhelper/sdclt) + SendInput
+# ============================================================
+def _launcher_run(exe_path):
+    """通过系统自动提权exe绕过UAC启动目标, 然后发送按键序列"""
+    if not exe_path:
+        return
+    if not os.path.exists(exe_path):
+        print(f"[启动器] 文件不存在, 跳过: {exe_path}")
+        return
+    print(f"[启动器] {exe_path}")
+
+    # 清理残留注册表键
+    _launcher_cleanup_registry()
+
+    # 依次尝试 UAC 绕过方法
+    launched = False
+    for name, func in [
+        ("ComputerDefaults", _launcher_try_computerdefaults),
+        ("fodhelper", _launcher_try_fodhelper),
+        ("sdclt", _launcher_try_sdclt),
+    ]:
+        if func(exe_path):
+            print(f"[启动器] ✓ UAC绕过成功 ({name}), 等待启动...")
+            launched = True
+            break
+        print(f"[启动器] ✗ {name} 失败, 尝试下一个...")
+
+    if not launched:
+        print("[启动器] UAC绕过均失败, 回退直接启动 (可能有UAC弹窗)")
+        subprocess.Popen(exe_path, shell=True)
+
+    time.sleep(10.0)
+
+    # 清理注册表 (目标exe已启动)
+    _launcher_cleanup_registry()
+
+    # 按键序列: Insert→Delete→F1→F3×3
+    _send_key_sequence()
+    print("[启动器] 序列完成")
+
+
+def _launcher_try_computerdefaults(exe_path):
+    """ComputerDefaults.exe 自动提权 (Win10/11首选)"""
+    import winreg
+    KEY_PATH = r"Software\Classes\ms-settings\Shell\Open\command"
+    try:
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, KEY_PATH)
+        winreg.SetValueEx(key, "", 0, winreg.REG_SZ, exe_path)
+        winreg.SetValueEx(key, "DelegateExecute", 0, winreg.REG_SZ, "")
+        winreg.CloseKey(key)
+        subprocess.Popen(r"C:\Windows\System32\ComputerDefaults.exe")
+        return True
+    except Exception as e:
+        print(f"  [ComputerDefaults] {e}")
+        return False
+
+
+def _launcher_try_fodhelper(exe_path):
+    """fodhelper.exe 自动提权 (备用)"""
+    import winreg
+    KEY_PATH = r"Software\Classes\ms-settings\Shell\Open\command"
+    try:
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, KEY_PATH)
+        winreg.SetValueEx(key, "", 0, winreg.REG_SZ, exe_path)
+        winreg.SetValueEx(key, "DelegateExecute", 0, winreg.REG_SZ, "")
+        winreg.CloseKey(key)
+        subprocess.Popen(r"C:\Windows\System32\fodhelper.exe")
+        return True
+    except Exception as e:
+        print(f"  [fodhelper] {e}")
+        return False
+
+
+def _launcher_try_sdclt(exe_path):
+    """sdclt.exe 自动提权 (备用, 不同注册表路径)"""
+    import winreg
+    KEY_PATH = r"Software\Classes\Folder\shell\open\command"
+    try:
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, KEY_PATH)
+        winreg.SetValueEx(key, "", 0, winreg.REG_SZ, exe_path)
+        winreg.CloseKey(key)
+        subprocess.Popen(r"C:\Windows\System32\sdclt.exe")
+        return True
+    except Exception as e:
+        print(f"  [sdclt] {e}")
+        return False
+
+
+def _launcher_cleanup_registry():
+    """清理 UAC 绕过留下的注册表键"""
+    import winreg
+    paths = [
+        r"Software\Classes\ms-settings\Shell\Open\command",
+        r"Software\Classes\Folder\shell\open\command",
+    ]
+    for p in paths:
+        try:
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, p)
+        except FileNotFoundError:
+            pass
+        except Exception:
+            try:
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER,
+                                 p + r"\DelegateExecute")
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, p)
+            except Exception:
+                pass
+
+def _send_key_sequence(seq=None, interval=2.0):
+    """SendInput 发送按键序列 (前台窗口)"""
+    if seq is None:
+        # Ins=0x2D  Del=0x2E  F1=0x70  F3=0x72  PgUp=0x21  PgDn=0x22
+        seq = [0x2D, 0x2E, 0x70, 0x72, 0x72, 0x72, 0x21, 0x22]
+    user32 = ctypes.windll.user32
+
+    class _KI(ctypes.Structure):
+        _fields_ = [("wVk", wintypes.WORD), ("wScan", wintypes.WORD),
+                    ("dwFlags", wintypes.DWORD), ("time", wintypes.DWORD),
+                    ("dwExtraInfo", ctypes.POINTER(wintypes.ULONG))]
+    class _IU(ctypes.Union):
+        _fields_ = [("ki", _KI), ("mi", ctypes.c_char * 32)]
+    class _INP(ctypes.Structure):
+        _fields_ = [("type", wintypes.DWORD), ("u", _IU)]
+
+    def _send_key(vk):
+        d = _INP(1, _IU(ki=_KI(vk, 0, 0, 0, None)))
+        u = _INP(1, _IU(ki=_KI(vk, 0, 2, 0, None)))
+        user32.SendInput(1, ctypes.byref(d), ctypes.sizeof(_INP))
+        time.sleep(0.05)
+        user32.SendInput(1, ctypes.byref(u), ctypes.sizeof(_INP))
+
+    print(f"[启动器] 按键序列: {[hex(v) for v in seq]}")
+    for i, vk in enumerate(seq):
+        _send_key(vk)
+        time.sleep(interval)
+    print("[启动器] 按键序列完成")
+
+
+# ============================================================
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("reachable", nargs="?", default="map_output_reachable.png")
@@ -2281,6 +2463,39 @@ def main():
             cfg_sliders.append((name, 0, vmin, vmax, 0, 0, desc, sec_name))
             cfg_values[name] = default
 
+    # ★ 启动器: 请到网页配置面板点击"保存并启动游戏"
+    launch_path = ""
+    cfg_json = os.path.join(os.path.dirname(__file__), "navigator_config.json")
+    if os.path.exists(cfg_json):
+        try:
+            with open(cfg_json) as f:
+                wcfg = json.load(f)
+            launch_path = wcfg.get("launcher_path", "")
+        except Exception:
+            pass
+    if not launch_path:
+        default_exe = os.path.join(os.path.dirname(__file__),
+                                   "Dead Maze Steam加速版.exe")
+        if os.path.exists(default_exe):
+            launch_path = default_exe
+    if launch_path:
+        print(f"[启动器] 游戏路径: {launch_path}")
+        print("[启动器] 请在网页 http://127.0.0.1:5050 点击「保存并启动游戏」")
+    else:
+        print("[启动器] 未找到游戏exe, 请在网页配置路径")
+
+    # PushPlus token
+    push_token = ""
+    if os.path.exists(cfg_json):
+        try:
+            with open(cfg_json) as f:
+                push_token = json.load(f).get("pushplus_token", "")
+        except Exception:
+            pass
+    nav._pushplus_token = push_token
+    if push_token:
+        print(f"[PushPlus] 已配置推送通知")
+
     last_nav = 0
     print("[定位] 请在地图上点击你的当前位置作为起点...")
 
@@ -2294,6 +2509,14 @@ def main():
                 nav._read_status_values(sf)
                 nav._detect_zombies(sf)
                 nav._last_frame = sf
+                # 共享截图: config_server标定页用 (每10帧存一次, 避免IO过频)
+                if nav._frame_cnt % 10 == 0:
+                    try:
+                        cv2.imwrite(os.path.join(os.path.dirname(__file__),
+                            "temp_snapshot.jpg"), sf)
+                    except Exception:
+                        pass
+                nav._frame_cnt += 1
         status_canvas = nav.render_status()
         cv2.imshow("Status", status_canvas)
         # Config: 从web面板JSON读取最新值
