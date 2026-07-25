@@ -16,10 +16,12 @@ DEFAULTS = {
 }
 
 def load_cfg():
+    cfg = dict(DEFAULTS)
     if os.path.exists(CFG_FILE):
         with open(CFG_FILE) as f:
-            return json.load(f)
-    return dict(DEFAULTS)
+            saved = json.load(f)
+        cfg.update(saved)  # 旧文件缺少的key用默认值
+    return cfg
 
 HTML = r'''
 <!DOCTYPE html>
