@@ -2330,6 +2330,10 @@ def main():
                     nav.WEAPON_TOLERANCE = int(wcfg["weapon_tol"])
                     nav.WEAPON_EMPTY_THRESHOLD = float(wcfg["weapon_thr"])
                     nav.WEAPON_CHECK_INTERVAL = int(wcfg["weapon_check"])
+                    if "skill1_cd" in wcfg:
+                        nav.skills.cooldowns = [
+                            float(wcfg["skill1_cd"]), float(wcfg["skill2_cd"]),
+                            float(wcfg["skill3_cd"]), float(wcfg["skill4_cd"])]
             except Exception:
                 pass
 

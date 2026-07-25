@@ -12,6 +12,7 @@ DEFAULTS = {
     "heal_hp": 80, "escape_hp": 20, "combat_entry_hp": 70,
     "max_zombies": 6, "weapon_tol": 20, "weapon_thr": 0.3,
     "weapon_check": 15, "return_thr": 15,
+    "skill1_cd": 3, "skill2_cd": 5, "skill3_cd": 8, "skill4_cd": 12,
 }
 
 def load_cfg():
@@ -51,7 +52,7 @@ HTML = r'''
 <div class="row"><label>Zombie Range (px)</label><input type="range" id="zombie_range" min="100" max="2000"><span class="val"></span><input type="number"><span class="desc">作战搜索半径</span></div>
 <div class="row"><label>Attack Range (px)</label><input type="range" id="attack_range" min="20" max="500"><span class="val"></span><input type="number"><span class="desc">攻击距离</span></div>
 <div class="row"><label>Chase Timeout (s)</label><input type="range" id="chase_timeout" min="1" max="30"><span class="val"></span><input type="number"><span class="desc">追击超时(超时换目标)</span></div>
-<div class="row"><label>Combat Entry HP%</label><input type="range" id="combat_entry_hp" min="20" max="100"><span class="val"></span><input type="number"><span class="desc">最低血量才进入战斗</span></div>
+<div class="row"><label>Combat Entry HP%</label><input type="range" id="combat_entry_hp" min="20" max="100"><span class="val"></span><input type="number"><span class="desc">血量高于此值才进战斗</span></div>
 <div class="row"><label>Max Zombies</label><input type="range" id="max_zombies" min="1" max="20"><span class="val"></span><input type="number"><span class="desc">进入战斗的最大僵尸数</span></div>
 
 <h2>STATUS 状态</h2>
@@ -59,6 +60,12 @@ HTML = r'''
 <div class="row"><label>Heal HP%</label><input type="range" id="heal_hp" min="20" max="100"><span class="val"></span><input type="number"><span class="desc">HP低于此值用skill_2补血</span></div>
 <div class="row"><label>Escape HP%</label><input type="range" id="escape_hp" min="5" max="50"><span class="val"></span><input type="number"><span class="desc">HP低于此值空格脱战</span></div>
 <div class="row"><label>Return Thr</label><input type="range" id="return_thr" min="1" max="100"><span class="val"></span><input type="number"><span class="desc">等同于Low Stat(O/P快捷键)</span></div>
+
+<h2>SKILLS 技能冷却</h2>
+<div class="row"><label>Skill 1 CD (s)</label><input type="range" id="skill1_cd" min="1" max="60"><span class="val"></span><input type="number"><span class="desc">技能1冷却(战斗技能)</span></div>
+<div class="row"><label>Skill 2 CD (s)</label><input type="range" id="skill2_cd" min="1" max="60"><span class="val"></span><input type="number"><span class="desc">技能2冷却(治疗!放第2格)</span></div>
+<div class="row"><label>Skill 3 CD (s)</label><input type="range" id="skill3_cd" min="1" max="60"><span class="val"></span><input type="number"><span class="desc">技能3冷却(战斗技能)</span></div>
+<div class="row"><label>Skill 4 CD (s)</label><input type="range" id="skill4_cd" min="1" max="60"><span class="val"></span><input type="number"><span class="desc">技能4冷却(战斗技能)</span></div>
 
 <h2>WEAPON 武器</h2>
 <div class="row"><label>W Tolerance</label><input type="range" id="weapon_tol" min="5" max="100"><span class="val"></span><input type="number"><span class="desc">空槽颜色容差</span></div>
@@ -71,7 +78,9 @@ HTML = r'''
 <script>
 const ids = ["waypoint_reach","deviation","move_dur","goal_reach","lookahead",
   "zombie_range","attack_range","chase_timeout","combat_entry_hp","max_zombies",
-  "low_stat_thr","heal_hp","escape_hp","return_thr","weapon_tol","weapon_thr","weapon_check"];
+  "low_stat_thr","heal_hp","escape_hp","return_thr",
+  "skill1_cd","skill2_cd","skill3_cd","skill4_cd",
+  "weapon_tol","weapon_thr","weapon_check"];
 function sync(r){
   let n=r.nextElementSibling, v=parseFloat(r.value);
   n.textContent=v; r.nextElementSibling.nextElementSibling.value=v
