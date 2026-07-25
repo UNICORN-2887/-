@@ -1,26 +1,16 @@
 """
-启动器测试 — 启动exe + 模拟按键序列
-Insert → 2s → Delete → 2s → F1 → 2s → F3 → 2s → F3 → 2s → F3
+启动器测试 — 任务计划程序跳过UAC + 模拟按键序列
 """
-import subprocess, time, os
-
-EXE_PATH = r"E:\Project\DeadMaze\Dead Maze Steam加速版.exe"
-
-# 模拟按键 (SendInput)
-import ctypes
+import subprocess, time, os, ctypes
 from ctypes import wintypes
 
-user32 = ctypes.windll.user32
-INPUT_KEYBOARD = 1
-KEYEVENTF_KEYUP = 0x0002
+EXE_PATH = r"E:\Project\DeadMaze\Dead Maze Steam加速版.exe"
+TASK_NAME = "DeadMazeLauncher"
 
-VK_CODES = {
-    "insert": 0x2D, "delete": 0x2E,
-    "f1": 0x70, "f3": 0x72,
-}
+user32 = ctypes.windll.user32
+VK_CODES = {"insert": 0x2D, "delete": 0x2E, "f1": 0x70, "f3": 0x72}
 
 def press_key(vk_code):
-    """按下并释放一个键"""
     class KEYBDINPUT(ctypes.Structure):
         _fields_ = [("wVk", wintypes.WORD), ("wScan", wintypes.WORD),
                     ("dwFlags", wintypes.DWORD), ("time", wintypes.DWORD),
@@ -29,16 +19,40 @@ def press_key(vk_code):
         _fields_ = [("ki", KEYBDINPUT), ("mi", ctypes.c_char * 32)]
     class INPUT(ctypes.Structure):
         _fields_ = [("type", wintypes.DWORD), ("u", INPUT_U)]
-
-    down = INPUT(INPUT_KEYBOARD, INPUT_U(ki=KEYBDINPUT(vk_code, 0, 0, 0, None)))
-    up = INPUT(INPUT_KEYBOARD, INPUT_U(ki=KEYBDINPUT(vk_code, 0, KEYEVENTF_KEYUP, 0, None)))
+    down = INPUT(1, INPUT_U(ki=KEYBDINPUT(vk_code, 0, 0, 0, None)))
+    up = INPUT(1, INPUT_U(ki=KEYBDINPUT(vk_code, 0, 2, 0, None)))
     user32.SendInput(1, ctypes.byref(down), ctypes.sizeof(INPUT))
     time.sleep(0.05)
     user32.SendInput(1, ctypes.byref(up), ctypes.sizeof(INPUT))
-    time.sleep(0.05)
+
+def launch_no_uac(exe_path):
+    """通过任务计划程序启动, 跳过UAC"""
+    if not os.path.exists(exe_path):
+        print(f"[跳过] 文件不存在: {exe_path}")
+        return False
+    try:
+        # 创建一次性任务(最高权限)
+        subprocess.run([
+            'schtasks', '/Create', '/TN', TASK_NAME,
+            '/SC', 'ONCE', '/TR', exe_path,
+            '/ST', '00:00', '/RL', 'HIGHEST', '/F'
+        ], capture_output=True, timeout=10)
+        # 立即运行
+        subprocess.run(['schtasks', '/Run', '/TN', TASK_NAME],
+                       capture_output=True, timeout=10)
+        print(f"[启动] {exe_path} (via TaskScheduler)")
+        time.sleep(3.0)
+        # 清理任务
+        subprocess.run(['schtasks', '/Delete', '/TN', TASK_NAME, '/F'],
+                       capture_output=True, timeout=5)
+        return True
+    except Exception as e:
+        print(f"[schtasks失败] {e}, 尝试直接启动...")
+        subprocess.Popen(exe_path, shell=True)
+        time.sleep(3.0)
+        return True
 
 def run_sequence():
-    """执行按键序列"""
     sequence = ["insert", "delete", "f1", "f3", "f3", "f3"]
     for i, key in enumerate(sequence):
         vk = VK_CODES[key]
@@ -49,17 +63,8 @@ def run_sequence():
     print("序列完成!")
 
 if __name__ == "__main__":
-    print("=== 启动器测试 ===")
-    print(f"EXE路径: {EXE_PATH}")
-
-    if os.path.exists(EXE_PATH):
-        print(f"启动: {EXE_PATH}")
-        subprocess.Popen(EXE_PATH, shell=True)
-        time.sleep(3.0)  # 等exe启动
-        print("exe已启动, 开始按键序列...")
-    else:
-        print(f"[跳过] 文件不存在: {EXE_PATH}")
-        print("直接测试按键序列...")
-
+    print("=== 启动器测试 (TaskScheduler跳过UAC) ===")
+    print(f"EXE: {EXE_PATH}")
+    launch_no_uac(EXE_PATH)
     run_sequence()
     print("测试完成!")
