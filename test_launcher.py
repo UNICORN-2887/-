@@ -26,31 +26,27 @@ def press_key(vk_code):
     user32.SendInput(1, ctypes.byref(up), ctypes.sizeof(INPUT))
 
 def launch_no_uac(exe_path):
-    """通过任务计划程序启动, 跳过UAC"""
+    """通过注册表设RunAsAdmin + 直接启动"""
     if not os.path.exists(exe_path):
         print(f"[跳过] 文件不存在: {exe_path}")
         return False
     try:
-        # 创建一次性任务(最高权限)
-        subprocess.run([
-            'schtasks', '/Create', '/TN', TASK_NAME,
-            '/SC', 'ONCE', '/TR', exe_path,
-            '/ST', '00:00', '/RL', 'HIGHEST', '/F'
-        ], capture_output=True, timeout=10)
-        # 立即运行
-        subprocess.run(['schtasks', '/Run', '/TN', TASK_NAME],
-                       capture_output=True, timeout=10)
-        print(f"[启动] {exe_path} (via TaskScheduler)")
-        time.sleep(3.0)
-        # 清理任务
-        subprocess.run(['schtasks', '/Delete', '/TN', TASK_NAME, '/F'],
-                       capture_output=True, timeout=5)
-        return True
+        # 设置兼容性标志: 始终以管理员运行 (一次设置, 永久生效)
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers",
+            0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, exe_path, 0, winreg.REG_SZ, "RUNASADMIN")
+        winreg.CloseKey(key)
+        print("[注册表] 已设RunAsAdmin")
     except Exception as e:
-        print(f"[schtasks失败] {e}, 尝试直接启动...")
-        subprocess.Popen(exe_path, shell=True)
-        time.sleep(3.0)
-        return True
+        print(f"[注册表] 设置失败: {e} (可能需要管理员权限)")
+
+    # 直接启动exe
+    subprocess.Popen(exe_path, shell=True)
+    print(f"[启动] {exe_path}")
+    time.sleep(3.0)
+    return True
 
 def run_sequence():
     sequence = ["insert", "delete", "f1", "f3", "f3", "f3"]
@@ -63,7 +59,7 @@ def run_sequence():
     print("序列完成!")
 
 if __name__ == "__main__":
-    print("=== 启动器测试 (TaskScheduler跳过UAC) ===")
+    print("=== 启动器测试 (注册表RunAsAdmin) ===")
     print(f"EXE: {EXE_PATH}")
     launch_no_uac(EXE_PATH)
     run_sequence()
