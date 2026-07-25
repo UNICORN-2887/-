@@ -1,5 +1,53 @@
 # CHANGELOG
 
+## 2026-07-26 — 标定中心 + PushPlus + 一键部署 + 官网文档
+
+### 标定中心 `/calibrate`
+- 新增 `calibrate.html` — 独立 HTML 前端 (脱离内联模板避免缓存问题)
+- 1920 原生分辨率截图 + 鼠标拖拽移动 ROI + WASD/方向键微调
+- 实时预览: 每 2s 自动刷新画面 + OCR + HP + 武器检测结果
+- `/api/preview` 端点: 返回截图 + OCR(6状态) + HP(绿色占比) + 武器(颜色匹配)
+- `/api/reset` 端点: 重置为本地 JSON 文件值
+- OCR 与导航器 `_read_status_values` 完全一致 (en模型 + 放大6x + allowlist数字)
+- HP 检测: HSV 绿色掩码 → 绿像素占比
+- 武器检测: 颜色匹配参考色 RGB(80,39,19) → match_ratio > thr → 空
+- 所有区域拆分为独立卡片: ocr_exp/hunger/thirst/stamina/threat/open + hp + weapon + inventory + food
+
+### PushPlus 微信推送
+- 网页配置面板新增 "NOTIFY 通知" 区块 (pushplus_token)
+- `_push_notify(title, content, cooldown=60)` — 同 title 60s 内不重复发送
+- 触发场景: 武器耗尽停止、HP过低脱战、Threat≥2返航、低状态返航
+- 每条推送含完整状态摘要 (HP/H/T/S/Thr)
+
+### 一键部署
+- `setup.bat` — 检测 Python → pip install 依赖 → 检测 Tesseract → 提示 OBS
+- `run_config.bat` — 启动配置中心 + 自动打开浏览器
+- `run_navigator.bat` — 启动导航 + 操作提示
+- Python 脚本自动安装缺失依赖 (importlib 检测 → subprocess pip install)
+- config_server.py 可独立运行，不依赖 navigator
+- 端口冲突检测: navigator 启动时若 config_server 已在运行则跳过
+
+### 配置面板升级
+- 新增 "GAME 游戏设置" 区块: 游戏路径配置
+- 启动器保留 (加速器路径)
+- `requirements.txt` 更新为完整依赖列表
+- `.gitignore` 加例外规则: YOLO best.pt + FastSAM-s.pt 纳入仓库
+
+### 官网文档 (blog.219882.xyz/deadmaze/)
+- 单页 HTML 深色主题，左侧导航 + 右侧内容
+- 章节: 概述/快速开始/环境安装/配置标定/导航使用/战斗系统/补给系统/参数说明/FAQ/进阶/截图
+- 进阶教程三步: 光流建图 → 可达区标定 → 导航验证 (完整键位表+参数+技巧)
+- README.md 重写: 快速开始+键位表+参数表+项目结构
+- 截图占位 (onerror 自动隐藏) → 待用户放入图片
+
+### 待续工作
+- ⏳ 网站截图: 5 张图放入 public/deadmaze/ → push 即上线
+- ⏳ 补给点击坐标标定工具 (click_points.json 各按钮点位因分辨率不同需标定)
+- ⏳ YOLO 自定义模型再训练教程
+- ⏳ 多地图支持与建图模板
+
+---
+
 ## 2026-07-25 — 武器检测 + Threat规则 + 双窗口 + 重进火堆
 
 ### 武器检测
