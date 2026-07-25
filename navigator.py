@@ -2186,29 +2186,17 @@ def main():
 
     nav = Navigator(args.reachable, args.map, args.camera)
 
-    # ★ 技能冷却时间配置
+    # 技能冷却从web面板或skill_cooldowns.json加载 (无终端输入)
     cd_file = os.path.join(os.path.dirname(__file__), 'skill_cooldowns.json')
     default_cds = [3, 5, 8, 12]
     if os.path.exists(cd_file):
         try:
             saved = json.load(open(cd_file))
             default_cds = saved.get('cooldowns', default_cds)
-            print(f"[技能] 加载冷却配置: {default_cds}")
         except Exception:
             pass
-    print(f"\n当前技能冷却: {default_cds}")
-    inp = input("修改冷却时间? (直接回车跳过, 或输入4个数字如 3,5,8,12): ").strip()
-    if inp:
-        try:
-            parts = [float(x.strip()) for x in inp.split(',')]
-            if len(parts) == 4:
-                default_cds = [max(0.5, p) for p in parts]
-                json.dump({'cooldowns': default_cds}, open(cd_file, 'w'))
-                print(f"[技能] 已保存: {default_cds}")
-        except Exception:
-            print("[技能] 格式错误, 使用默认值")
     nav.skills.cooldowns = default_cds[:]
-    print(f"[技能] 冷却时间: {default_cds}\n")
+    print(f"[技能] 冷却: {default_cds} (网页端可修改)\n")
 
     print("\n=== 路径导航闭环 ===")
     print("左键=起点 | 右键=终点(A*规划)")
