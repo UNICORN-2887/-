@@ -24,6 +24,8 @@ label_studio/yolo_labels/
 # 模型
 models/
 *.pt
+!AImaneuver/runs/detect/deadmaze_combat/weights/best.pt
+!FastSAM-s.pt
 *.pth
 
 # 临时
