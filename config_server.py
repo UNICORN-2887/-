@@ -1,4 +1,14 @@
 """Config Web Panel - Flask server"""
+# ── 自动安装缺失依赖 ──
+import subprocess as _sp, sys as _sys, importlib as _il
+_AUTO_DEPS = {"flask": "flask", "cv2": "opencv-python", "numpy": "numpy",
+    "pygrabber": "pygrabber", "easyocr": "easyocr", "pytesseract": "pytesseract"}
+for _mod, _pkg in _AUTO_DEPS.items():
+    try: _il.import_module(_mod)
+    except ImportError:
+        print(f"[自动安装] {_pkg}...")
+        _sp.check_call([_sys.executable, "-m", "pip", "install", _pkg, "-q"])
+
 import json, os, threading, time, ctypes, base64, socket
 from ctypes import wintypes
 from flask import Flask, render_template_string, request, jsonify
@@ -30,6 +40,7 @@ DEFAULTS = {
     "weapon_check": 15, "return_thr": 15,
     "skill1_cd": 4, "skill2_cd": 12, "skill3_cd": 22, "skill4_cd": 32,
     "launcher_path": "", "pushplus_token": "",
+    "game_path": "",
 }
 
 def load_cfg():
@@ -94,8 +105,11 @@ HTML = r'''
 <h2>NOTIFY 通知</h2>
 <div class="row"><label>PushPlus Token</label><input type="text" id="pushplus_token" style="flex:1;max-width:400px;background:#333;border:1px solid#555;color:#fff;padding:4px" placeholder="留空则不推送"><span class="desc">停止时微信推送通知 (pushplus.plus)</span></div>
 
+<h2>GAME 游戏设置</h2>
+<div class="row"><label>游戏路径</label><input type="text" id="game_path" style="flex:1;max-width:400px;background:#333;border:1px solid#555;color:#fff;padding:4px" placeholder="DeadMaze.exe完整路径"><span class="desc">游戏本体exe路径，用于导航连接</span></div>
+
 <h2>LAUNCHER 启动器</h2>
-<div class="row"><label>EXE Path</label><input type="text" id="launcher_path" style="flex:1;max-width:400px;background:#333;border:1px solid#555;color:#fff;padding:4px" placeholder="留空则不启动"><span class="desc">启动前运行的exe路径</span></div>
+<div class="row"><label>加速器路径</label><input type="text" id="launcher_path" style="flex:1;max-width:400px;background:#333;border:1px solid#555;color:#fff;padding:4px" placeholder="留空则不启动"><span class="desc">加速版exe路径 (可选)</span></div>
 <button onclick="save_then_launch()" style="background:#e90;margin-top:5px">💾 保存并启动游戏</button><span class="status" id="launch_status"></span>
 
 <button onclick="save()">SAVE CONFIG</button><span class="status" id="status"></span>
@@ -106,7 +120,7 @@ const ids = ["waypoint_reach","deviation","move_dur","goal_reach","lookahead",
   "zombie_range","attack_range","chase_timeout","combat_entry_hp","max_zombies",
   "low_stat_thr","heal_hp","escape_hp","return_thr",
   "skill1_cd","skill2_cd","skill3_cd","skill4_cd",
-  "weapon_tol","weapon_thr","weapon_check","launcher_path","pushplus_token"];
+  "weapon_tol","weapon_thr","weapon_check","launcher_path","pushplus_token","game_path"];
 function sync(r){
   let n=r.nextElementSibling, v=parseFloat(r.value);
   n.textContent=v; r.nextElementSibling.nextElementSibling.value=v
@@ -125,13 +139,15 @@ async function load_cfg(){
   ids.forEach(id=>{
     let el=document.getElementById(id);
     el.value=d[id];
-    if(id!=='launcher_path'&&id!=='pushplus_token')sync(el);
+    let strIds=['launcher_path','pushplus_token','game_path'];
+    if(!strIds.includes(id))sync(el);
   })
 }
 async function save(){
   let d={};ids.forEach(id=>{
     let el=document.getElementById(id);
-    d[id]=(id==='launcher_path'||id==='pushplus_token')?el.value:parseFloat(el.value)
+    let strIds=['launcher_path','pushplus_token','game_path'];
+    d[id]=strIds.includes(id)?el.value:parseFloat(el.value)
   });
   let r=await fetch('/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
   document.getElementById('status').textContent='Saved!';

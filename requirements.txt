@@ -1,25 +1,30 @@
-# DeadMaze - 光流法建图与定位
-# 一键安装依赖
+# DeadMaze - 一键安装依赖
 
-# 核心
+# 核心 (OpenCV + NumPy)
 opencv-python>=4.8.0
 numpy>=1.24.0
 
-# 屏幕采集
-mss>=10.0.0
-PyAutoGUI>=0.9.54
+# 后台操控
+pywin32>=306
 
-# OCR
+# OCR 三层回退
+easyocr>=1.7.0
 pytesseract>=0.3.10
 
-# YOLO
+# YOLO 对象检测
 ultralytics>=8.0.0
 
-# 标注工具
-label-studio>=1.23.0
+# 网页配置面板
+flask>=3.0.0
 
-# Windows GUI 操控
-pywin32>=306
+# 屏幕采集
+mss>=10.0.0
+
+# 摄像头发现
+pygrabber>=0.2
+
+# 进程管理
+psutil>=5.9.0
 
 # 图像分割（可选）
 segment-anything>=1.0
