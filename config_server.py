@@ -7,7 +7,7 @@ for _mod, _pkg in _AUTO_DEPS.items():
     try: _il.import_module(_mod)
     except ImportError:
         print(f"[自动安装] {_pkg}...")
-        _sp.check_call([_sys.executable, "-m", "pip", "install", _pkg, "-q"])
+        _sp.check_call([_sys.executable, "-m", "pip", "install", _pkg, "-q", "--user"])
 
 import json, os, threading, time, ctypes, base64, socket
 from ctypes import wintypes

@@ -1,47 +1,45 @@
 @echo off
-chcp 65001 >nul
-title DeadMaze 导航
+chcp 65001 >nul 2>nul
+title DeadMaze Navigator
 
 echo.
 echo ============================================
-echo   DeadMaze 导航 ^& 战斗
+echo   DeadMaze - Navigation ^& Combat
 echo ============================================
 echo.
-echo   启动前请确认:
-echo   [*] OBS 虚拟摄像头已开启 (1920x1080)
-echo   [*] DeadMaze 游戏已运行
-echo   [*] 已通过 "run_config.bat" 完成标定
+echo   Before starting:
+echo   [*] OBS Virtual Camera ON (1920x1080)
+echo   [*] DeadMaze game running
+echo   [*] ROI calibrated (run_config.bat)
 echo ============================================
 echo.
 
-:: ── 扫描 map/ 下的可用地图 ──
+:: Scan map/ directory
 setlocal enabledelayedexpansion
 set COUNT=0
-echo   可用地图:
-echo   ──────────────────────────────────────
+echo   Available maps:
+echo   ----------------------------------------
 for /d %%d in (map\*) do (
     set /a COUNT+=1
     set NAME=%%~nxd
-    :: 检查是否有可达图
     set REACH=%%d\!NAME!_reachable.png
-    set CAMP=%%d\!NAME!_campfire.json
-    set STATUS=未标定
-    if exist "!REACH!" set STATUS=已标定
+    set STATUS=unmarked
+    if exist "!REACH!" set STATUS=READY
     echo     [!COUNT!]  !NAME!  [!STATUS!]
 )
-echo   ──────────────────────────────────────
+echo   ----------------------------------------
 if %COUNT%==0 (
-    echo   没有找到任何地图!
-    echo   请先运行建图工具或下载地图
+    echo   No maps found!
+    echo   Please run map_stitcher or download a map first.
     pause
     exit /b 1
 )
 
 echo.
-set /p CHOICE="请选择地图 [1-%COUNT%] (直接回车=1): "
+set /p CHOICE="Select map [1-%COUNT%] (Enter=1): "
 if "%CHOICE%"=="" set CHOICE=1
 
-:: ── 根据选择构建路径 ──
+:: Build paths from choice
 set IDX=0
 for /d %%d in (map\*) do (
     set /a IDX+=1
@@ -53,22 +51,20 @@ for /d %%d in (map\*) do (
 )
 
 if not defined MAP_NAME (
-    echo 无效选择!
+    echo Invalid choice!
     pause
     exit /b 1
 )
 
 echo.
-echo   启动: %MAP_NAME%
-echo   ──────────────────────────────────────
-echo   操作提示:
-echo   左键=起点 ^| 右键=终点 ^| Enter=开始导航
-echo   空格=暂停 ^| Esc=停止 ^| Q=退出
-echo   H=返航 ^| M=循环巡逻 ^| 1-4=技能
-echo   ──────────────────────────────────────
+echo   Launching: %MAP_NAME%
+echo   ----------------------------------------
+echo   L-click=Start | R-click=Goal | Enter=Go
+echo   Space=Pause | Esc=Stop | Q=Quit
+echo   H=Campfire | M=Patrol | 1-4=Skills
+echo   ----------------------------------------
 echo.
 
-:: ── 启动 ──
 python navigator.py "%MAP_PNG%" --map "%MAP_JPG%"
 
 pause

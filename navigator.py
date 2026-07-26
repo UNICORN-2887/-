@@ -36,7 +36,7 @@ for _mod, _pkg in _AUTO_DEPS_NAV.items():
     try: _il_launch.import_module(_mod)
     except ImportError:
         print(f"[自动安装] {_pkg}...")
-        _sp_launch.check_call([_sys_launch.executable, "-m", "pip", "install", _pkg, "-q"])
+        _sp_launch.check_call([_sys_launch.executable, "-m", "pip", "install", _pkg, "-q", "--user"])
 
 import os
 import sys
