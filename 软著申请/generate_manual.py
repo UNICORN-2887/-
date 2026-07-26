@@ -44,12 +44,15 @@ def generate_manual():
             "开源仓库：https://github.com/UNICORN-2887/-",
         ]),
         ("2. 环境安装", [
-            "2.1 Python 3.10+：访问 python.org 下载安装，安装时勾选「Add Python to PATH」",
+            "2.1 Python 3.10+：访问 python.org 下载安装，安装时勾选「Add Python to PATH」。",
+            "[配图：setup.bat运行界面截图，显示Python检测和pip安装依赖的过程]",
             "2.2 一键安装依赖：解压项目后双击 setup.bat，自动检测Python环境并pip安装opencv-python/numpy/pywin32/easyocr/ultralytics/flask/mss/pygrabber/psutil等依赖库",
-            "2.3 OBS Studio：下载安装OBS Studio，添加游戏窗口为采集源，工具→虚拟摄像头→启动，确保输出分辨率为1920x1080。OBS虚拟摄像头是游戏画面采集的唯一方式",
+            "2.3 OBS Studio：下载安装OBS Studio，添加游戏窗口为采集源，工具→虚拟摄像头→启动，确保输出分辨率为1920x1080。OBS虚拟摄像头是游戏画面采集的唯一方式。",
+            "[配图：OBS Studio主界面，红框标出工具→虚拟摄像头→启动菜单路径，以及设置→视频→1920x1080分辨率]",
             "2.4 如果Python环境检测失败，请确认已安装Python 3.10+并勾选PATH选项；如果pip安装失败，可手动运行: pip install -r requirements.txt",
         ]),
         ("3. 快速开始", [
+            "[配图：run_config.bat运行后的终端窗口，显示「Server ready」和浏览器自动打开的页面]",
             "3.1 配置与标定：双击 run_config.bat 启动网页配置服务，等待约6秒自动打开浏览器，同时打开配置面板(http://127.0.0.1:5050)和标定中心(/calibrate)两个页面",
             "3.2 设置游戏路径：在配置面板GAME区域填写DeadMaze游戏exe的完整路径",
             "3.3 摄像头选择：在标定中心顶部选择OBS虚拟摄像头，点击「测试」确认画面正常，点击「保存」",
@@ -57,6 +60,9 @@ def generate_manual():
             "3.5 启动导航：双击 run_navigator.bat，选择地图(默认MazonAcademy)，在地图窗口左键设起点、右键设终点、Enter开始导航",
         ]),
         ("4. 导航使用", [
+            "[配图：导航窗口全貌，包含地图、A*路径蓝色线条、起点/终点标记、状态面板]",
+            "[配图：run_navigator.bat地图选择菜单，列出可用地图]",
+
             "4.1 设定起点：在地图窗口左键点击角色当前位置",
             "4.2 设定终点：右键点击目标位置，系统自动A*规划路径（蓝色线条），显示预估距离",
             "4.3 开始导航：按Enter键，角色自动沿规划路径8方向移动",
@@ -84,6 +90,8 @@ def generate_manual():
             "6.6 补给后恢复：自动关闭交互界面，恢复之前的巡逻路线或导航任务",
         ]),
         ("7. 网页配置面板", [
+            "[配图：网页配置面板全貌，展示NAVIGATION/COMBAT/STATUS/SKILLS/WEAPON各参数滑块]",
+
             "7.1 启动：双击run_config.bat或运行python config_server.py，浏览器访问http://127.0.0.1:5050",
             "7.2 导航参数：WP Reach/Deviation/Move Dur/Goal Reach/Lookahead共5个导航阈值，滑块调节实时生效",
             "7.3 战斗参数：Zombie Range/Attack Range/Chase Timeout/Combat Entry HP%/Max Zombies共5个战斗阈值",
@@ -95,6 +103,9 @@ def generate_manual():
             "7.9 保存：点击SAVE CONFIG按钮保存所有参数到navigator_config.json",
         ]),
         ("8. ROI标定中心", [
+            "[配图：标定中心全貌——左侧OBS画面+彩色ROI边框叠加，右侧三组ROI卡片列表，卡片下方显示OCR识别结果]",
+            "[配图：摄像头选择下拉框和测试按钮，确认OBS画面正确]",
+
             "8.1 入口：启动config后访问http://127.0.0.1:5050/calibrate",
             "8.2 摄像头选择：页面顶部下拉框列出所有可用摄像头，OBS虚拟摄像头标注[OBS]，点击测试确认画面，点击保存",
             "8.3 实时预览：点击「▶实时预览」按钮，每2秒自动刷新OBS画面并运行OCR/HP/武器检测",
@@ -106,6 +117,9 @@ def generate_manual():
             "8.9 设备适配：OBS虚拟摄像头缩放/偏移因用户而异，标定页面使每个用户可独立调整ROI位置适配自己的OBS配置",
         ]),
         ("9. 自建地图", [
+            "[配图：map_stitcher光流建图——左为OBS实时画面（带裁剪框），右为拼接中的大地图]",
+            "[配图：reachability_map可达区标定——涂刷/描边/门标记操作界面，标注各模式和键位]",
+
             "9.1 光流建图：运行 python map_stitcher.py -c 1 -o MyMap.jpg",
             "9.2 裁剪框：按T显示/隐藏裁剪框，IJKL移动位置，+/-缩放边距，排除HUD和工具栏区域",
             "9.3 自动拼接：按A开启自动模式，操控角色沿地图边界走一圈，再蛇形填充内部区域，系统每0.3秒自动拼接一帧",
@@ -161,13 +175,29 @@ def generate_manual():
     doc.add_paragraph("项目网站：https://blog.219882.xyz/deadmaze/")
     doc.add_paragraph("开源仓库：https://github.com/UNICORN-2887/-")
 
-    # [截图说明] 如需在手册中插入截图，请在此处添加以下图片:
+    # ===== 配图清单 =====
+    # 请在Word中搜索 [配图： 找到所有占位，手动插入对应截图后删除占位文字
+    #
     # 图片1: screen-config.png — 网页配置面板
+    #   → 第7章 网页配置面板
     # 图片2: screen-calibrate.png — ROI标定中心
+    #   → 第8章 ROI标定中心
     # 图片3: screen-navigator.png — 导航窗口
+    #   → 第4章 导航使用
     # 图片4: screen-stitching.png — 光流法建图
+    #   → 第9章 自建地图
     # 图片5: screen-reachable.png — 可达区标定
-    # 请在docx中手动插入后另存为提交版本
+    #   → 第9章 自建地图
+    # 图片6: setup.bat运行截图
+    #   → 第2章 环境安装
+    # 图片7: run_config.bat终端窗口
+    #   → 第3章 快速开始
+    # 图片8: OBS Studio设置界面
+    #   → 第2章 环境安装
+    # 图片9: 地图选择菜单
+    #   → 第4章 导航使用
+    # 图片10: 摄像头选择器
+    #   → 第8章 ROI标定中心
 
     path = os.path.join(OUTPUT_DIR, f"DeadMaze Automation\u7528\u6237\u64cd\u4f5c\u624b\u518c-{VERSION}.doc")
     doc.save(path)
