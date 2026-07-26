@@ -110,6 +110,9 @@ HTML = r'''
 
 <h2>LAUNCHER 启动器</h2>
 <div class="row"><label>加速器路径</label><input type="text" id="launcher_path" style="flex:1;max-width:400px;background:#333;border:1px solid#555;color:#fff;padding:4px" placeholder="留空则不启动"><span class="desc">加速版exe路径 (可选)</span></div>
+<div style="margin:10px 0">
+  <a href="/calibrate" target="_blank" style="color:#ff0;text-decoration:underline">→ 前往标定中心 (调整ROI位置)</a>
+</div>
 <button onclick="save_then_launch()" style="background:#e90;margin-top:5px">💾 保存并启动游戏</button><span class="status" id="launch_status"></span>
 
 <button onclick="save()">SAVE CONFIG</button><span class="status" id="status"></span>
@@ -501,15 +504,17 @@ def _run_ocr(crop, key):
             except Exception:
                 _ocr_reader = False
         if key == "ocr_open":
-            # "开"字用Tesseract (EasyOCR en模型不识别中文)
+            # "开"字: 与navigator._confirm_open保持一致
             try:
                 import pytesseract
-                raw = pytesseract.image_to_string(big, lang="chi_sim",
-                    config="--psm 7").strip()
+                _, th = cv2.threshold(big, 127, 255, cv2.THRESH_BINARY)
+                raw = pytesseract.image_to_string(th, lang="chi_sim",
+                    config="--psm 6").strip()
                 if "开" in raw:
                     txt = raw
-            except Exception:
-                pass
+                print(f"[OCR:Open] raw='{raw}'")
+            except Exception as e:
+                print(f"[OCR:Open] err={e}")
         elif _ocr_reader and _ocr_reader is not False:
             rt = _ocr_reader.readtext(big, detail=1, allowlist="0123456789")
             if rt:
