@@ -17,34 +17,33 @@ from game_automator.driver import Actions, AbstractDriver
 from game_automator.mapping import Pathfinder
 
 
-# ── 方向计算工具 ──────────────────────────────
-_DIRECTION_MAP = {
-    (0, -1): Actions.MOVE_N, (0, 1): Actions.MOVE_S,
-    (-1, 0): Actions.MOVE_W, (1, 0): Actions.MOVE_E,
-    (1, -1): Actions.MOVE_NE, (-1, -1): Actions.MOVE_NW,
-    (1, 1): Actions.MOVE_SE, (-1, 1): Actions.MOVE_SW,
-}
+# ── 8方向 + 最佳匹配 (直搬 DeadMaze best_direction) ──
+_DIR_VECTORS = [
+    ( 0, -1, Actions.MOVE_N),        # 0: N
+    ( 1, -1, Actions.MOVE_NE),       # 1: NE
+    ( 1,  0, Actions.MOVE_E),        # 2: E
+    ( 1,  1, Actions.MOVE_SE),       # 3: SE
+    ( 0,  1, Actions.MOVE_S),        # 4: S
+    (-1,  1, Actions.MOVE_SW),       # 5: SW
+    (-1,  0, Actions.MOVE_W),        # 6: W
+    (-1, -1, Actions.MOVE_NW),       # 7: NW
+]
 
 
 def compute_direction(from_pos: Tuple[int, int],
                       to_pos: Tuple[int, int]) -> Actions:
-    """给定当前位置和目标点, 返回最接近的8方向动作."""
+    """向量 (dx, dy) → 最接近的8方向 (内积最大)."""
     dx = to_pos[0] - from_pos[0]
     dy = to_pos[1] - from_pos[1]
     if dx == 0 and dy == 0:
-        return None  # 已到达
-    # 选主导轴 (比例大于2:1就只走单轴)
-    if abs(dx) > abs(dy) * 2:
-        k = (int(np.sign(dx)), 0)
-    elif abs(dy) > abs(dx) * 2:
-        k = (0, int(np.sign(dy)))
-    else:
-        k = (int(np.sign(dx)), int(np.sign(dy)))
-    act = _DIRECTION_MAP.get(k)
-    if act is None:
-        print(f"[Dir] MISS {k} from ({from_pos[0]},{from_pos[1]})→({to_pos[0]},{to_pos[1]}) dx={dx} dy={dy}")
-        act = Actions.MOVE_N
-    return act
+        return None
+    best_i, best_dot = 0, -999
+    for i, (vx, vy, _) in enumerate(_DIR_VECTORS):
+        d = vx * dx + vy * dy
+        if d > best_dot:
+            best_dot = d
+            best_i = i
+    return _DIR_VECTORS[best_i][2]
 
 
 # ── 导航控制器 ────────────────────────────────
