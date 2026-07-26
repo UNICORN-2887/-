@@ -110,16 +110,25 @@ class Navigator:
             self.arrived = True
             return None
 
-        # 原版 get_next_waypoint: 向前扫找第一个距当前位置 >= lookahead 的点
-        best = self._wp_index
+        # 找到路径上距当前位置最近的点 (跳过身后点)
+        min_dist = float('inf')
+        nearest_idx = self._wp_index
+        for i in range(self._wp_index, len(self._path)):
+            wx, wy = self._path[i]
+            d = np.hypot(wx - current_pos[0], wy - current_pos[1])
+            if d < min_dist:
+                min_dist = d
+                nearest_idx = i
+        # current_waypoint 只进不退 (原版有 max(current_waypoint, wpidx-2))
+        self._wp_index = nearest_idx
+
+        # 向前找第一个距离 >= lookahead 的点
         for i in range(self._wp_index, len(self._path)):
             wx, wy = self._path[i]
             if np.hypot(wx - current_pos[0], wy - current_pos[1]) >= self.lookahead:
-                best = i
+                self._wp_index = i
                 break
-        if best < len(self._path) - 1:
-            best = min(best + 1, len(self._path) - 1)  # look ahead a bit more
-        target = self._path[best]
+        target = self._path[min(self._wp_index + 10, len(self._path) - 1)]
 
         return compute_direction(current_pos, target)
 
