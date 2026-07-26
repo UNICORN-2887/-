@@ -109,8 +109,14 @@ def main():
             goal = (mx, my)
             print(f"[Goal] {goal}")
             if start and goal:
+                print(f"[Plan] start={start} → goal={goal}")
+                print(f"  start reachable={pf.is_reachable(start)}")
+                print(f"  goal reachable={pf.is_reachable(goal)}")
                 path = nav.set_route(start, goal)
-                print(f"[Path] {len(path)} points: {path[:5]}{'...' if len(path)>5 else ''}")
+                if path:
+                    print(f"[Path] {len(path)} points: {path[:3]}...")
+                else:
+                    print(f"[Path] FAILED - no route found!")
 
     cv2.namedWindow("Integration Test", cv2.WINDOW_NORMAL)
     cv2.setMouseCallback("Integration Test", on_mouse)
