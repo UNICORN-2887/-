@@ -160,7 +160,8 @@ class PositionTracker:
         self._total_dx = 0.0
         self._total_dy = 0.0
 
-    def update(self, frame: np.ndarray
+    def update(self, frame: np.ndarray,
+               verbose: bool = False
                ) -> Tuple[Tuple[int, int], float]:
         if self._ref_gray is None:
             self.set_reference(frame)
@@ -169,15 +170,24 @@ class PositionTracker:
         frame = self._apply_crop(frame)
         curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # ORB 计算位移
         kp1, des1 = self._orb.detectAndCompute(self._ref_gray, None)
         kp2, des2 = self._orb.detectAndCompute(curr_gray, None)
+
+        if verbose:
+            k1 = len(kp1) if kp1 else 0
+            k2 = len(kp2) if kp2 else 0
+            d1 = len(des1) if des1 is not None else 0
+            d2 = len(des2) if des2 is not None else 0
+            print(f"[Tracker] kp1={k1} kp2={k2} des1={d1} des2={d2} "
+                  f"crop={self._crop} pos={self._position}")
 
         dx, dy, conf = 0.0, 0.0, 0.0
         if des1 is not None and des2 is not None and len(des1) >= 8 and len(des2) >= 8:
             matches = self._matcher.knnMatch(des1, des2, k=2)
             good = [m for m, n in matches
                      if m.distance < 0.75 * n.distance]
+            if verbose:
+                print(f"[Tracker] matches={len(matches)} good={len(good)}")
             if len(good) >= 6:
                 dx_list, dy_list = [], []
                 for m in good:
@@ -191,6 +201,9 @@ class PositionTracker:
                                if abs(ddx-dx) < 5 and abs(ddy-dy) < 5)
                 conf = inliers / len(dx_list) if dx_list else 0.0
                 dx, dy = -dx, -dy
+                if verbose:
+                    print(f"[Tracker] dx={dx:.1f} dy={dy:.1f} conf={conf:.2f} "
+                          f"total={(self._total_dx-dx):.0f},{(self._total_dy-dy):.0f}")
 
         self._last_conf = conf
         if conf > 0.3:
@@ -198,8 +211,9 @@ class PositionTracker:
             self._total_dy += dy
             self._position[0] -= int(dx)
             self._position[1] -= int(dy)
+        elif verbose:
+            print(f"[Tracker] 跳过 (conf={conf:.2f} < 0.3)")
 
-        # 更新参考帧 (低通防止漂移)
         if conf > 0.5:
             self._ref_gray = curr_gray
 

@@ -47,6 +47,7 @@ def main():
     navigating = False
     scale = 1.0
     disp_w, disp_h = 1200, 800
+    frame_cnt = 0
 
     def draw_map():
         nonlocal scale, disp_w, disp_h
@@ -126,7 +127,7 @@ def main():
 
         # 定位更新
         if navigating and tracker:
-            pos, conf = tracker.update(frame)
+            pos, conf = tracker.update(frame, verbose=True)
             action = nav.step(pos)
             if action:
                 driver.execute(action, duration_ms=150)
