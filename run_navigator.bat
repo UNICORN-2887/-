@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0"
 chcp 65001 >nul 2>nul
 title DeadMaze Navigator
 
@@ -58,6 +59,8 @@ if not defined MAP_NAME (
 
 echo.
 echo   Launching: %MAP_NAME%
+echo   Map:  %MAP_JPG%
+echo   Rch:  %MAP_PNG%
 echo   ----------------------------------------
 echo   L-click=Start | R-click=Goal | Enter=Go
 echo   Space=Pause | Esc=Stop | Q=Quit
@@ -65,6 +68,11 @@ echo   H=Campfire | M=Patrol | 1-4=Skills
 echo   ----------------------------------------
 echo.
 
+echo   [CMD] python navigator.py "%MAP_PNG%" --map "%MAP_JPG%"
+echo.
+
 python navigator.py "%MAP_PNG%" --map "%MAP_JPG%"
 
-pause
+echo.
+echo   Navigator exited. Press any key to close.
+pause >nul
