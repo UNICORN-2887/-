@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 from game_automator.capture import OBSVideoCapture
 from game_automator.mapping import Pathfinder
-from game_automator.navigation import compute_direction
+from game_automator.navigation import Navigator
 from game_controller import DeadMazeController
 
 MAP_IMG = os.path.join(os.path.dirname(__file__), "..", "..", "..",
@@ -30,7 +30,7 @@ def best_direction(dx, dy):
 
 def main():
     cap = OBSVideoCapture(cam_id=OBSVideoCapture.find_obs() or 1)
-    pf = Pathfinder(MAP_RCH, shrink=8)
+    pf = Pathfinder(MAP_RCH, shrink=8)  # DeadMaze pathfinder.py 默认
     map_img = cv2.imread(MAP_IMG)
     mh, mw = map_img.shape[:2]
     scale = min(1200/mw, 800/mh, 1.0)
@@ -42,9 +42,9 @@ def main():
     print(f"[Ctrl] {ctrl.target_hwnd:#x}")
 
     start = goal = path = None
+    nav = Navigator(pf, waypoint_reach=25)  # DeadMaze 默认 WP Reach
     navigating = False
     pos = (0, 0)
-    wp_idx = 0
     frame_cnt = 0
 
     def draw():
@@ -81,61 +81,54 @@ def main():
         cap.read()
         key = cv2.waitKey(30) & 0xFF
 
-        if navigating and path and not (wp_idx >= len(path)):
-            # ── 原版导航逻辑 ──
-            tgt = path[wp_idx]
+        if navigating and not nav.arrived:
+            # 用框架 Navigator 步进
+            action = nav.step(pos)
+            if action is None:
+                print(f"[Arrived] ({pos[0]},{pos[1]})")
+                navigating = False
+                continue
+
+            # 从 home 的 compute_direction 拿到方向向量, 映射到按键
+            tgt = nav.current_waypoint
             dx, dy = tgt[0]-pos[0], tgt[1]-pos[1]
-            dist = np.hypot(dx, dy)
-
-            if dist < 40:  # 到达路标
-                wp_idx += 1
-                if wp_idx >= len(path):
-                    print(f"[Arrived] ({pos[0]},{pos[1]})")
-                    navigating = False
-                    continue
-
-            # 方向 → 按键
             di = best_direction(dx, dy)
             keys = DIR_VECTORS[di][2:]
-            all_vks = {'W': ctrl.VK_W, 'A': ctrl.VK_A, 'S': ctrl.VK_S, 'D': ctrl.VK_D}
+            all_vks = {'W':ctrl.VK_W,'A':ctrl.VK_A,'S':ctrl.VK_S,'D':ctrl.VK_D}
             needed = set(keys)
 
-            # 释放不需要的
             for name, vk in all_vks.items():
                 if name not in needed:
                     try: ctrl.key_up(vk)
                     except: pass
-            # 按下需要的
             for k in keys:
                 try: ctrl.key_down(getattr(ctrl, f'VK_{k}'))
                 except: pass
-
-            time.sleep(0.3)  # MOVE_DURATION
-
-            # 释放全部
+            time.sleep(0.3)
             for k in keys:
                 try: ctrl.key_up(getattr(ctrl, f'VK_{k}'))
                 except: pass
 
-            # 模拟位移 (假设角色按方向移动了)
+            # 模拟位移
             vx, vy = DIR_VECTORS[di][0], DIR_VECTORS[di][1]
-            SPEED = 50  # px per 0.3s
-            pos = (pos[0] + vx*SPEED, pos[1] + vy*SPEED)
+            spd = 40 if vx and vy else 60
+            pos = (pos[0]+vx*spd, pos[1]+vy*spd)
 
             frame_cnt += 1
             if frame_cnt % 5 == 0:
                 print(f"[Nav] ({pos[0]},{pos[1]}) → ({tgt[0]},{tgt[1]}) "
-                      f"dir={di} keys={keys} wp={wp_idx}/{len(path)}")
+                      f"d=({dx},{dy}) k={keys} {nav._wp_index}/{len(nav.path)}")
 
         cv2.imshow("Test", draw())
 
         if key == 13 and path:  # Enter
             navigating = True
-            wp_idx = 0
+            nav.set_route(start, goal)
             pos = start or path[0]
-            print(f"[Go] {len(path)}pts")
+            print(f"[Go] {len(nav.path)}pts")
         elif key == 27:  # Esc
             navigating = False
+            nav.cancel()
             for k in ['W','A','S','D']:
                 try: ctrl.key_up(getattr(ctrl, f'VK_{k}'))
                 except: pass
