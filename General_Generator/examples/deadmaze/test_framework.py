@@ -117,7 +117,11 @@ def main():
             frame_cnt += 1
             # 光流追踪位置
             if tracker:
-                pos, conf = tracker.update(frame)
+                pos2, conf2 = tracker.update(frame)
+                if frame_cnt % 30 == 0:
+                    print(f"[LK] pos=({pos2[0]},{pos2[1]}) conf={conf2:.2f}")
+                # 用追踪位置（有变化才更新）
+                pos = (pos2[0], pos2[1]) if conf2 > 0.3 else (start[0], start[1])
             else:
                 pos = start or (0, 0)
 
