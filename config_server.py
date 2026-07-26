@@ -295,10 +295,12 @@ def _capture_frame():
         return None
     snap = os.path.join(os.path.dirname(__file__), "temp_snapshot.jpg")
     if os.path.exists(snap):
-        frame = cv2.imread(snap)
-        if frame is not None:
-            _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            return base64.b64encode(buf).decode()
+        # 只有被navigator活跃更新时才使用 (5秒内修改过)
+        if time.time() - os.path.getmtime(snap) < 5:
+            frame = cv2.imread(snap)
+            if frame is not None:
+                _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                return base64.b64encode(buf).decode()
 
     # 独立模式: 持久打开OBS摄像头
     if _live_cap is None or not _live_cap.isOpened():
