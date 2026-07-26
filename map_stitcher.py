@@ -8,7 +8,9 @@ DeadMaze - 地图拼接工具
   S     - 保存地图
   R     - 重置地图
   T     - 切换裁剪框显示
-  方向键 - 微调裁剪框边界
+  IJKL  - 微调裁剪框位置
+  +/-   - 缩放裁剪框 (四边同时)
+  Shift+WASD - 收缩单边 (上/下/左/右)
   Q     - 退出
 
 裁剪框: 只拼接框内区域，屏蔽 HUD/侧边栏/工具栏
@@ -308,7 +310,8 @@ def main():
     print("  C     - 手动拼接当前帧")
     print("  T     - 切换裁剪框显示")
     print("  IJKL  - 微调裁剪框位置")
-    print("  +/-   - 缩放裁剪框 (±10px 每条边)")
+    print("  +/-   - 缩放裁剪框 (四边同时)")
+    print("  Shift+WASD - 收缩单边 (上/下/左/右)")
     print("  S     - 保存地图 + 裁剪配置")
     print("  R     - 重置地图")
     print("  Q     - 退出")
@@ -353,7 +356,9 @@ def main():
                 md = cv2.resize(md, (int(mw * scale), int(mh * scale)))
             cv2.imshow("拼接地图", md)
 
-        key = cv2.waitKey(1) & 0xFF
+        raw_key = cv2.waitKeyEx(1)
+        key = raw_key & 0xFF
+        _shift = bool(raw_key & 0x10000)  # Shift修饰键
 
         # ---- 拼接 ----
         if key == ord('c') or key == ord('C'):
@@ -388,7 +393,7 @@ def main():
             crop.x += 5
             stitcher.status = f"裁剪框右移: {crop}"
 
-        # ---- 缩放裁剪框 ----
+        # ---- 缩放裁剪框 (四边同时) ----
         elif key == ord('+') or key == ord('='):
             crop.x = max(0, crop.x - 10)
             crop.y = max(0, crop.y - 10)
@@ -401,6 +406,20 @@ def main():
             crop.w = max(100, crop.w - 20)
             crop.h = max(100, crop.h - 20)
             stitcher.status = f"裁剪框缩小: {crop}"
+
+        # ---- 伸缩单边裁剪框 (Shift+WASD: 收缩上/下/左/右边) ----
+        elif key in (ord('w'), ord('W')) and _shift:
+            crop.y += 10; crop.h = max(100, crop.h - 10)
+            stitcher.status = f"裁剪框收缩上边: {crop}"
+        elif key in (ord('s'), ord('S')) and _shift:
+            crop.h = max(100, crop.h - 10)
+            stitcher.status = f"裁剪框收缩下边: {crop}"
+        elif key in (ord('a'), ord('A')) and _shift:
+            crop.x += 10; crop.w = max(100, crop.w - 10)
+            stitcher.status = f"裁剪框收缩左边: {crop}"
+        elif key in (ord('d'), ord('D')) and _shift:
+            crop.w = max(100, crop.w - 10)
+            stitcher.status = f"裁剪框收缩右边: {crop}"
 
         # ---- 保存 ----
         elif key == ord('s') or key == ord('S'):
