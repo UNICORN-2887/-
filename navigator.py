@@ -2366,8 +2366,8 @@ def _send_key_sequence(seq=None, interval=2.0):
 # ============================================================
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("reachable", nargs="?", default="map_output_reachable.png")
-    parser.add_argument("--map", default="map_output.jpg")
+    parser.add_argument("reachable", nargs="?", default="MazonAcademy_reachable.png")
+    parser.add_argument("--map", default="MazonAcademy.jpg")
     parser.add_argument("-c", "--camera", type=int, default=1)
     args = parser.parse_args()
 

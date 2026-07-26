@@ -1,9 +1,10 @@
 # 数据文件
 pic/
 *.jpg
+!MazonAcademy.jpg
 *.jpeg
 *.png
-map_output*.jpg
+!MazonAcademy_reachable.png
 cropped_*/
 
 # Python
@@ -31,6 +32,11 @@ models/
 # 临时
 *.json
 !label_studio/*.json
+!MazonAcademy_campfire.json
+!MazonAcademy_doors.json
+!navigator_config.json
+!weapon_roi.json
+!AImaneuver/*.json
 
 # 配置文件（本地）
 map_stitcher_crop.json

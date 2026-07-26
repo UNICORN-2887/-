@@ -26,7 +26,7 @@ run_navigator.bat
 ```bash
 pip install -r requirements.txt
 python config_server.py                    # → http://127.0.0.1:5050
-python navigator.py map_output_reachable.png --map map_output.jpg
+python navigator.py MazonAcademy_reachable.png --map MazonAcademy.jpg
 ```
 
 ## 🛠 环境要求
@@ -102,14 +102,14 @@ python navigator.py map_output_reachable.png --map map_output.jpg
 ## 🔬 自定义地图
 
 ```bash
-# 1. 光流建图
-python map_stitcher.py -c 1 -o my_map.jpg
+# 1. 光流建图 (用你喜欢的名字)
+python map_stitcher.py -c 1 -o MyNewMap.jpg
 
 # 2. 可达区标定
-python reachability_map.py my_map.jpg -o my_map_reachable.png
+python reachability_map.py MyNewMap.jpg -o MyNewMap_reachable.png
 
-# 3. 导航验证
-python navigator.py my_map_reachable.png --map my_map.jpg
+# 3. 导航验证 (指定你的地图)
+python navigator.py MyNewMap_reachable.png --map MyNewMap.jpg
 ```
 
 详见 [进阶教程](https://blog.219882.xyz/deadmaze/#advanced)
@@ -139,6 +139,8 @@ DeadMaze/
 ├── setup.bat                 # 一键安装
 ├── run_config.bat            # 启动配置中心
 ├── run_navigator.bat         # 启动导航
-├── map_output.jpg            # MazonAcademy 大地图
-└── map_output_reachable.png  # 可达区
+├── MazonAcademy.jpg              # MazonAcademy 大地图
+├── MazonAcademy_reachable.png    # 可达区
+├── MazonAcademy_campfire.json    # 火堆坐标
+└── MazonAcademy_doors.json       # 门标记
 ```
