@@ -2,7 +2,7 @@
 # ── 自动安装缺失依赖 ──
 import subprocess as _sp, sys as _sys, importlib as _il
 _AUTO_DEPS = {"flask": "flask", "cv2": "opencv-python", "numpy": "numpy",
-    "pygrabber": "pygrabber", "easyocr": "easyocr", "pytesseract": "pytesseract"}
+    "pygrabber": "pygrabber", "easyocr": "easyocr"}
 for _mod, _pkg in _AUTO_DEPS.items():
     try: _il.import_module(_mod)
     except ImportError:

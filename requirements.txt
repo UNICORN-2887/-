@@ -7,9 +7,8 @@ numpy>=1.24.0
 # 后台操控
 pywin32>=306
 
-# OCR 三层回退
+# OCR (EasyOCR 中英文双模型)
 easyocr>=1.7.0
-pytesseract>=0.3.10
 
 # YOLO 对象检测
 ultralytics>=8.0.0

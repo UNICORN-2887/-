@@ -30,8 +30,8 @@ GOAL_REACH_THRESHOLD = 100     # 终点到达阈值
 import subprocess as _sp_launch, sys as _sys_launch, importlib as _il_launch
 _AUTO_DEPS_NAV = {"cv2": "opencv-python", "numpy": "numpy",
     "win32gui": "pywin32", "win32api": "pywin32", "win32con": "pywin32",
-    "ultralytics": "ultralytics", "pytesseract": "pytesseract",
-    "easyocr": "easyocr", "mss": "mss", "pygrabber": "pygrabber"}
+    "ultralytics": "ultralytics", "easyocr": "easyocr",
+    "mss": "mss", "pygrabber": "pygrabber"}
 for _mod, _pkg in _AUTO_DEPS_NAV.items():
     try: _il_launch.import_module(_mod)
     except ImportError:
@@ -70,12 +70,7 @@ try:
     HAS_YOLO = True
 except Exception:
     HAS_YOLO = False
-try:
-    import pytesseract as _pt
-    _pt.pytesseract.tesseract_cmd = r"E:\Tools\tesseract\tesseract.exe"
-    HAS_TESSERACT = True
-except Exception:
-    HAS_TESSERACT = False
+# Tesseract: 已全局迁移到 EasyOCR ch_sim
 
 
 # ============================================================
@@ -564,11 +559,10 @@ class Navigator:
 
     # ----------------------------------------------------------
     def _confirm_open(self):
-        """OCR确认火堆界面'开'字 (使用标定的Open ROI)"""
-        if not HAS_TESSERACT: return True  # 无Tesseract则跳过
+        """OCR确认火堆界面'开'字 (EasyOCR ch_sim)"""
         ret, f2 = self.tracker.cap.read()
         if not ret: return False
-        # 加载标定的Open ROI (默认300,300,40,30)
+        # 加载标定的Open ROI
         ox, oy, ow, oh = 300, 300, 40, 30
         roi_file = os.path.join(os.path.dirname(__file__), 'AImaneuver', 'ocr_reader_roi.json')
         if os.path.exists(roi_file):
@@ -580,9 +574,15 @@ class Navigator:
         roi = f2[oy:oy+oh, ox:ox+ow]
         if roi.size == 0: return False
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        big = cv2.resize(gray, (ow*5, oh*5), interpolation=cv2.INTER_CUBIC)
-        _, th = cv2.threshold(big, 127, 255, cv2.THRESH_BINARY)
-        txt = _pt.image_to_string(th, lang='chi_sim', config='--psm 6').strip()
+        big = cv2.resize(gray, (ow*6, oh*6), interpolation=cv2.INTER_CUBIC)
+        try:
+            if not hasattr(self, '_ocr_zh') or self._ocr_zh is None:
+                import easyocr
+                self._ocr_zh = easyocr.Reader(["ch_sim"], gpu=True, verbose=False)
+            results = self._ocr_zh.readtext(big, detail=0)
+            txt = "".join(results) if results else ""
+        except Exception:
+            txt = ""
         print(f"[返航] OCR ROI({ox},{oy},{ow}x{oh}) ='{txt}'")
         return '开' in txt
 
