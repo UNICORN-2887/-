@@ -40,7 +40,7 @@ DEFAULTS = {
     "weapon_check": 15, "return_thr": 15,
     "skill1_cd": 4, "skill2_cd": 12, "skill3_cd": 22, "skill4_cd": 32,
     "launcher_path": "", "pushplus_token": "",
-    "game_path": "",
+    "game_path": "", "obs_cam_id": 1,
 }
 
 def load_cfg():
@@ -305,10 +305,11 @@ def _capture_frame():
                 _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
                 return base64.b64encode(buf).decode()
 
-    # 独立模式: 持久打开OBS摄像头
+    # 独立模式: 持久打开摄像头 (使用配置的ID)
     if _live_cap is None or not _live_cap.isOpened():
-        cam_id = _find_obs_cam()
-        print(f"[Camera] Opening OBS camera #{cam_id}...")
+        cfg = load_cfg()
+        cam_id = cfg.get("obs_cam_id", _find_obs_cam())
+        print(f"[Camera] Opening camera #{cam_id}...")
         _live_cap = cv2.VideoCapture(cam_id, cv2.CAP_DSHOW)
         _live_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
         _live_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
@@ -392,6 +393,57 @@ def calibrate_page():
     html_path = os.path.join(os.path.dirname(__file__), "calibrate.html")
     with open(html_path, encoding="utf-8") as f:
         return f.read()
+
+@app.route("/api/cameras")
+def api_cameras():
+    """列出所有可用摄像头"""
+    cams = []
+    try:
+        from pygrabber.dshow_graph import FilterGraph
+        graph = FilterGraph()
+        for i, name in enumerate(graph.get_input_devices()):
+            cams.append({"id": i, "name": name, "is_obs": "obs" in name.lower()})
+    except Exception:
+        # 回退: OpenCV枚举
+        for i in range(5):
+            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+            if cap.isOpened():
+                cams.append({"id": i, "name": f"Camera {i}", "is_obs": False})
+                cap.release()
+    # 读取已保存的摄像头ID
+    cfg = load_cfg()
+    current = cfg.get("obs_cam_id", _find_obs_cam())
+    return jsonify({"cameras": cams, "current": current})
+
+@app.route("/api/camera_test", methods=["POST"])
+def api_camera_test():
+    """测试指定摄像头: 返回一帧画面"""
+    data = request.get_json() or {}
+    cam_id = data.get("cam_id", _find_obs_cam())
+    cap = cv2.VideoCapture(cam_id, cv2.CAP_DSHOW)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    for _ in range(5):
+        cap.read()  # 预热
+    ret, frame = cap.read()
+    cap.release()
+    if not ret:
+        return jsonify({"error": f"无法读取摄像头 #{cam_id}"})
+    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    return jsonify({"ok": True, "image": base64.b64encode(buf).decode(),
+                    "cam_id": cam_id, "shape": list(frame.shape[:2])})
+
+@app.route("/api/save_cam_id", methods=["POST"])
+def api_save_cam_id():
+    """保存选定的摄像头ID到配置"""
+    data = request.get_json() or {}
+    cam_id = data.get("cam_id", 1)
+    cfg = load_cfg()
+    cfg["obs_cam_id"] = int(cam_id)
+    cfg_path = os.path.join(os.path.dirname(__file__), "navigator_config.json")
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    return jsonify({"ok": True, "cam_id": cam_id})
 
 @app.route("/api/capture", methods=["POST"])
 def api_capture():

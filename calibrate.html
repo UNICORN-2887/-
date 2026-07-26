@@ -47,6 +47,17 @@ canvas{display:block;cursor:crosshair}
   <div class="tip"><span class="live-dot" id="liveDot" style="display:none"></span>拖拽=移动 | WASD=微调 | Shift=加速</div>
  </div>
  <button class="btn btn-nav" onclick="location.href='/'">← 返回配置</button>
+ <div style="padding:6px 14px">
+  <div class="tip" style="margin-bottom:4px">📷 摄像头</div>
+  <div style="display:flex;gap:4px">
+   <select id="camSel" onchange="onCamChange()" style="flex:1;background:#1a1a2a;border:1px solid#444;color:#eee;padding:4px;font-size:11px;border-radius:3px">
+    <option value="-1">加载中...</option>
+   </select>
+   <button class="btn btn-cap" onclick="testCamera()" style="font-size:11px;padding:4px 10px">测试</button>
+   <button class="btn btn-cap" onclick="saveCamId()" style="font-size:11px;padding:4px 10px;background:#555">保存</button>
+  </div>
+  <div class="tip" id="camStatus" style="margin-top:2px"></div>
+ </div>
  <div style="display:flex;gap:6px;padding:0 14px">
   <button class="btn btn-cap" onclick="toggleLive()" id="btnLive" style="flex:1">▶ 实时预览</button>
   <button class="btn btn-cap" onclick="doCapture()" style="flex:1">📷 单张截图</button>
@@ -77,6 +88,54 @@ const GRP={'OCR状态':['ocr_exp','ocr_hunger','ocr_thirst','ocr_stamina','ocr_t
 c=document.getElementById('c'); ctx=c.getContext('2d');
 
 async function api(url,opt){let r=await fetch(url,opt||{});return r.json();}
+
+// === 摄像头管理 ===
+async function loadCameras(){
+  let j=await api('/api/cameras');
+  let sel=document.getElementById('camSel');
+  sel.innerHTML='';
+  j.cameras.forEach(c=>{
+    let opt=document.createElement('option');
+    opt.value=c.id;
+    opt.textContent=(c.is_obs?'[OBS] ':'')+c.name;
+    if(c.id===j.current){opt.selected=true;showCamOBS(c.is_obs);}
+    sel.appendChild(opt);
+  });
+  if(j.cameras.length===0)sel.innerHTML='<option>未检测到摄像头</option>';
+}
+
+async function onCamChange(){
+  let id=document.getElementById('camSel').value;
+  if(id<0)return;
+}
+
+async function testCamera(){
+  let id=parseInt(document.getElementById('camSel').value);
+  if(id<0)return;
+  document.getElementById('camStatus').textContent='测试中...';
+  let j=await api('/api/camera_test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cam_id:id})});
+  if(j.error){document.getElementById('camStatus').textContent='❌ '+j.error;return}
+  if(j.image){
+    img=new Image();
+    img.onload=()=>{c.width=img.width;c.height=img.height;ctx.drawImage(img,0,0);drawAll();};
+    img.src='data:image/jpeg;base64,'+j.image;
+    document.getElementById('info').textContent='测试摄像头#'+id+' ('+j.shape[0]+'x'+j.shape[1]+')';
+    document.getElementById('camStatus').textContent='✅ 连接成功!';
+    showCamOBS(j.shape[0]>=1080); // 大分辨率=可能是OBS
+  }
+}
+
+async function saveCamId(){
+  let id=parseInt(document.getElementById('camSel').value);
+  if(id<0)return;
+  await api('/api/save_cam_id',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cam_id:id})});
+  toast('摄像头 #'+id+' 已保存');
+}
+
+function showCamOBS(isOBS){
+  let s=document.getElementById('camStatus');
+  if(isOBS)s.innerHTML='✅ 检测到 OBS (1920x1080)';
+}
 
 // === 实时 ===
 async function toggleLive(){
@@ -211,7 +270,7 @@ async function doSave(){
 
 function toast(m,c){let t=document.getElementById('toast');t.textContent=m;t.style.display='block';t.style.color=c||'#0f0';setTimeout(()=>t.style.display='none',2000);}
 
-(async function(){roi=await api('/api/rois');renderCards();})();
+(async function(){roi=await api('/api/rois');renderCards();loadCameras();})();
 </script>
 </body>
 </html>
