@@ -485,7 +485,8 @@ def api_reset():
     return jsonify({"ok": True, "rois": rois})
 
 # 全局OCR实例 (延迟加载)
-_ocr_reader = None
+_ocr_reader = None  # en数字
+_ocr_zh = None       # ch_sim中文(开字)
 
 def _run_ocr(crop, key):
     """对裁剪区域运行OCR (与navigator._read_status_values保持一致)"""
@@ -504,15 +505,16 @@ def _run_ocr(crop, key):
             except Exception:
                 _ocr_reader = False
         if key == "ocr_open":
-            # "开"字: 与navigator._confirm_open保持一致
+            # "开"字: EasyOCR ch_sim (Tesseract经常未安装)
+            global _ocr_zh
             try:
-                import pytesseract
-                _, th = cv2.threshold(big, 127, 255, cv2.THRESH_BINARY)
-                raw = pytesseract.image_to_string(th, lang="chi_sim",
-                    config="--psm 6").strip()
-                if "开" in raw:
-                    txt = raw
-                print(f"[OCR:Open] raw='{raw}'")
+                if _ocr_zh is None:
+                    import easyocr as _eo
+                    _ocr_zh = _eo.Reader(["ch_sim"], gpu=True, verbose=False)
+                results = _ocr_zh.readtext(big, detail=0)
+                if results:
+                    txt = " ".join(results)
+                print(f"[OCR:Open] easyocr_ch={txt}")
             except Exception as e:
                 print(f"[OCR:Open] err={e}")
         elif _ocr_reader and _ocr_reader is not False:
