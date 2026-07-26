@@ -97,7 +97,8 @@ def main():
             if tracker:
                 tracker.reset_position(start)
             else:
-                tracker = PositionTracker(MAP_IMG, start_pos=start)
+                tracker = PositionTracker(MAP_IMG, start_pos=start,
+                    crop=(160, 60, 1600, 960))  # 排除HUD
             frame = cap.read()
             if frame is not None:
                 tracker.set_reference(frame)

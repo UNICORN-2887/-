@@ -130,34 +130,43 @@ class PositionTracker:
             pos, conf = tracker.update(cap.read())
     """
 
-    def __init__(self, map_img_path: str, start_pos: Tuple[int, int]):
+    def __init__(self, map_img_path: str, start_pos: Tuple[int, int],
+                 crop: Optional[Tuple[int, int, int, int]] = None):
+        """crop: (x, y, w, h) 裁剪区, 排除 HUD/UI 避免干扰追踪."""
         self._position = list(start_pos)
         self._total_dx = 0.0
         self._total_dy = 0.0
         self._ref_gray = None
+        self._crop = crop  # (x, y, w, h)
         self._orb = cv2.ORB_create(nfeatures=1500)
         self._matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
         self._last_conf = 0.0
 
-        # 预加载地图 (用于金字塔匹配重定位)
+        # 预加载地图
         self._map_img = cv2.imread(map_img_path)
         if self._map_img is not None:
             self._map_gray = cv2.cvtColor(self._map_img, cv2.COLOR_BGR2GRAY)
 
+    def _apply_crop(self, frame):
+        if self._crop:
+            x, y, w, h = self._crop
+            return frame[y:y+h, x:x+w]
+        return frame
+
     # ── 核心 ────────────────────────────────
     def set_reference(self, frame: np.ndarray) -> None:
-        """设定参考帧 (在地图上点击确认位置后调用)."""
+        frame = self._apply_crop(frame)
         self._ref_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         self._total_dx = 0.0
         self._total_dy = 0.0
 
     def update(self, frame: np.ndarray
                ) -> Tuple[Tuple[int, int], float]:
-        """返回 (当前位置, 置信度). 置信度<0.3 表示可能丢失."""
         if self._ref_gray is None:
             self.set_reference(frame)
             return (tuple(self._position), 0.0)
 
+        frame = self._apply_crop(frame)
         curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         # ORB 计算位移
@@ -218,6 +227,7 @@ class PositionTracker:
         if self._map_gray is None:
             return False, 0.0
 
+        frame = self._apply_crop(frame)
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         fh, fw = frame_gray.shape
         mh, mw = self._map_gray.shape
