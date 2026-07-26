@@ -286,39 +286,46 @@ def _find_obs_cam():
     return 0  # 回退到0
 
 _live_cap = None  # 持久摄像头连接
+_live_count = 0   # 帧计数器(调试)
 
 def _capture_frame():
-    """获取当前帧: 优先navigator共享截图 > 持久OBS摄像头 > 一次性摄像头"""
-    global _live_cap
+    """获取当前帧: 优先navigator共享截图 > 持久OBS摄像头"""
+    global _live_cap, _live_count
     if not HAS_CV2:
         return None
     snap = os.path.join(os.path.dirname(__file__), "temp_snapshot.jpg")
     if os.path.exists(snap):
-        # navigator正在运行, 共享截图每10帧更新
         frame = cv2.imread(snap)
         if frame is not None:
             _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
             return base64.b64encode(buf).decode()
 
-    # 独立模式: 持久打开OBS摄像头 (不复用则每次都重新初始化太慢)
+    # 独立模式: 持久打开OBS摄像头
     if _live_cap is None or not _live_cap.isOpened():
         cam_id = _find_obs_cam()
+        print(f"[Camera] Opening OBS camera #{cam_id}...")
         _live_cap = cv2.VideoCapture(cam_id, cv2.CAP_DSHOW)
         _live_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
         _live_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-        _live_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # 最小缓冲避免旧帧
-        # 预热: 读几帧让摄像头稳定
-        for _ in range(5):
-            _live_cap.grab()
+        _live_count = 0
+        # 预热
+        for i in range(10):
+            _live_cap.read()
+        print(f"[Camera] Ready, warmed up 10 frames")
 
     if _live_cap.isOpened():
-        # 清空缓冲区取最新帧
-        for _ in range(3):
-            _live_cap.grab()
-        ret, frame = _live_cap.retrieve()
+        # 读空缓冲取最新帧
+        for _ in range(4):
+            _live_cap.read()
+        ret, frame = _live_cap.read()
+        _live_count += 1
         if ret:
+            if _live_count <= 3 or _live_count % 10 == 0:
+                print(f"[Camera] Frame #{_live_count} ok, shape={frame.shape}")
             _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
             return base64.b64encode(buf).decode()
+        else:
+            print(f"[Camera] Frame #{_live_count} FAILED")
     return None
 
 def _load_rois():
