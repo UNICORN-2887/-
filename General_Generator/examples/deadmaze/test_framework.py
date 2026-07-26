@@ -31,7 +31,7 @@ def main():
     cap = OBSVideoCapture(cam_id=cam_id)
     cap.warmup(5)
 
-    pf = Pathfinder(MAP_RCH, shrink=40)
+    pf = Pathfinder(MAP_RCH, shrink=8)
     print(f"[Grid] {pf.grid_size}")
 
     driver = DeadMazeDriver()

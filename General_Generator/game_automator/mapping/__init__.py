@@ -294,148 +294,119 @@ class PositionTracker:
         return self._last_conf
 
 
-# ── A* 寻路 ──────────────────────────────────
+# ── A* 寻路 (DeadMaze验证版) ─────────────────
+def _astar(grid_2d, start_xy, goal_xy):
+    """A* on binary grid (255=walkable, 0=obstacle).
+    返回 [(x,y), ...] 像素路径 或 None.
+    (直接取自 DeadMaze pathfinder.py, 已验证可靠)
+    """
+    h, w = grid_2d.shape
+    visited = np.zeros((h, w), dtype=np.uint8)
+    parent = np.zeros((h, w, 2), dtype=np.int32)
+    dirs = [(0,1),(1,0),(0,-1),(-1,0),(1,1),(1,-1),(-1,1),(-1,-1)]
+
+    def hh(p):
+        return np.hypot(p[0]-goal_xy[0], p[1]-goal_xy[1])
+
+    heap = [(hh(start_xy), 0, start_xy[0], start_xy[1])]
+    visited[start_xy[1], start_xy[0]] = 1
+
+    while heap:
+        _, cost, x, y = heapq.heappop(heap)
+        if (x, y) == goal_xy:
+            path = [(x, y)]
+            while (x, y) != start_xy:
+                px, py = parent[y, x]
+                path.append((px, py))
+                x, y = px, py
+            path.reverse()
+            return path
+
+        for dx, dy in dirs:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < w and 0 <= ny < h:
+                if grid_2d[ny, nx] > 0 and not visited[ny, nx]:
+                    visited[ny, nx] = 1
+                    mc = 1.414 if dx and dy else 1.0
+                    nc = cost + mc
+                    heapq.heappush(heap, (nc + hh((nx, ny)), nc, nx, ny))
+                    parent[ny, nx] = (x, y)
+    return None
+
+
 class Pathfinder:
-    """A* 寻路器.
+    """A* 寻路器 (封装 DeadMaze 验证过的 astar).
 
     Usage:
-        pf = Pathfinder("reachable.png", shrink=80)
-        path = pf.plan((1000, 500), (2000, 800))  # 返回坐标列表
-        if path is None: print("不可达")
+        pf = Pathfinder("reachable.png", shrink=8)
+        path = pf.plan((1000, 500), (2000, 800))
     """
 
-    NEIGHBORS = [(1,0),(-1,0),(0,1),(0,-1),(1,1),(-1,1),(1,-1),(-1,-1)]
-
-    def __init__(self, reachable_path: str, shrink: int = 80):
-        full = cv2.imread(reachable_path, cv2.IMREAD_GRAYSCALE)
-        if full is None:
+    def __init__(self, reachable_path: str, shrink: int = 8):
+        self.reachable = cv2.imread(reachable_path, cv2.IMREAD_GRAYSCALE)
+        if self.reachable is None:
             raise FileNotFoundError(reachable_path)
-        self._original = full
+        self._h, self._w = self.reachable.shape[:2]
         self._shrink = shrink
+        self._ds = 4  # 降采样因子 (同 DeadMaze)
         self._build_grid()
 
     def _build_grid(self):
-        s = self._shrink
-        h, w = self._original.shape
-        self._gh, self._gw = h // s, w // s
-        self._grid = np.zeros((self._gh, self._gw), dtype=np.uint8)
-        for gy in range(self._gh):
-            for gx in range(self._gw):
-                sy, sx = gy * s, gx * s
-                block = self._original[sy:sy+s, sx:sx+s]
-                self._grid[gy, gx] = 255 if np.mean(block) > 200 else 0
+        if self._shrink > 0:
+            k = np.ones((self._shrink, self._shrink), np.uint8)
+            eroded = cv2.erode(self.reachable, k, iterations=1)
+        else:
+            eroded = self.reachable
+        h2, w2 = self._h // self._ds, self._w // self._ds
+        small = cv2.resize(eroded, (w2, h2), interpolation=cv2.INTER_NEAREST)
+        _, small = cv2.threshold(small, 127, 255, cv2.THRESH_BINARY)
+        self._grid = small
+        self._gh, self._gw = h2, w2
+        pct = np.sum(self._grid == 255) / self._grid.size * 100
+        print(f"[Pathfinder] shrink={self._shrink} ds=1/{self._ds} "
+              f"grid={w2}x{h2} walkable={pct:.1f}%")
+
+    def _to_grid(self, ix, iy):
+        return ix // self._ds, iy // self._ds
+
+    def _to_image(self, gx, gy):
+        return gx * self._ds + self._ds // 2, gy * self._ds + self._ds // 2
 
     def plan(self, start: Tuple[int, int], goal: Tuple[int, int]
              ) -> Optional[List[Tuple[int, int]]]:
-        """返回从 start 到 goal 的路径坐标列表, 不可达返回 None."""
-        gs = self._to_grid(start)
-        gg = self._to_grid(goal)
+        gs = self._to_grid(*start)
+        gg = self._to_grid(*goal)
         gh, gw = self._grid.shape
         if not (0 <= gs[0] < gw and 0 <= gs[1] < gh): return None
         if not (0 <= gg[0] < gw and 0 <= gg[1] < gh): return None
 
-        open_set = [(0, gs)]
-        came_from = {}
-        g_score = {gs: 0}
-        visited = 0
-
-        print(f"[A*] start_gr={gs} goal_gr={gg} grid={gw}x{gh}")
-        while open_set:
-            _, current = heapq.heappop(open_set)
-            visited += 1
-            if visited == 1:
-                print(f"[A*] first pop: current={current} gg={gg} same={current == gg}")
-            if current == gg:
-                print(f"[A*] FOUND current={current} gg={gg} visited={visited}")
-                path = [self._to_pixel(gg)]
-                while current in came_from:
-                    current = came_from[current]
-                    path.append(self._to_pixel(current))
-                path.reverse()
-                print(f"[A*] raw={len(path)}pts first={path[0]} last={path[-1]}")
-                result = self._smooth(path)
-                print(f"[A*] smooth={len(result)}pts {result[:3]}...")
-                return result
-
-            neigh_count = 0
-            for dx, dy in self.NEIGHBORS:
-                nb = (current[0]+dx, current[1]+dy)
-                if not (0 <= nb[0] < gw and 0 <= nb[1] < gh): continue
-                if self._grid[nb[1], nb[0]] == 0: continue
-                neigh_count += 1
-                cost = 1.4 if dx and dy else 1.0
-                tentative = g_score[current] + cost
-                if nb not in g_score or tentative < g_score[nb]:
-                    g_score[nb] = tentative
-                    h = np.hypot(nb[0]-gg[0], nb[1]-gg[1])
-                    heapq.heappush(open_set, (tentative + h, nb))
-            if visited == 1:
-                print(f"[A*] first pop: {neigh_count} reachable neighbors")
-        print(f"[A*] FAILED after {visited} visits, open_set empty")
-        return None
-
-    def _to_grid(self, pixel): return (pixel[0] // self._shrink, pixel[1] // self._shrink)
-    def _to_pixel(self, grid): return (grid[0] * self._shrink, grid[1] * self._shrink)
-
-    def _smooth(self, path: list) -> list:
-        """简化路径 + 等距重采样确保有中间导航点."""
-        print(f"[Smooth] in={len(path)}pts")
-        if len(path) <= 2:
-            r = self._resample(path)
-            print(f"[Smooth] short→resample={len(r)}pts")
-            return r
-        # 先轻量平滑
-        result = [path[0]]
-        i = 1
-        while i < len(path) - 1:
-            j = i + 1
-            while j < len(path) and self._line_clear(path[i-1], path[j]):
-                j += 1
-            j -= 1
-            if j > i:
-                result.append(path[j])
-                i = j + 1
-            else:
-                result.append(path[i])
-                i += 1
-        result.append(path[-1])
-
-        return self._resample(result)
+        raw = _astar(self._grid, gs, gg)
+        if raw is None:
+            return None
+        # 转回像素坐标 + 等距重采样
+        path = [self._to_image(x, y) for x, y in raw]
+        return self._resample(path)
 
     def _resample(self, path: list, step: int = 200) -> list:
-        """等距重采样: 每 step px 插一个导航点."""
         if len(path) < 2:
             return path
-        resampled = [path[0]]
-        added = 0
-        for idx in range(len(path) - 1):
-            a, b = path[idx], path[idx + 1]
-            seg = np.hypot(b[0] - a[0], b[1] - a[1])
-            n = max(1, int(seg / step))
+        out = [path[0]]
+        for i in range(len(path) - 1):
+            a, b = path[i], path[i+1]
+            seg = np.hypot(b[0]-a[0], b[1]-a[1])
+            n = int(seg / step)
             for t in range(1, n + 1):
-                frac = t / n
-                resampled.append((int(a[0] + (b[0]-a[0])*frac),
-                                  int(a[1] + (b[1]-a[1])*frac)))
-                added += 1
-        print(f"[Resample] in={len(path)} out={len(resampled)} added={added}")
-        return resampled
-
-    def _line_clear(self, a, b):
-        """射线是否全部可达."""
-        steps = max(abs(b[0]-a[0]), abs(b[1]-a[1])) // self._shrink + 1
-        for t in range(steps + 1):
-            px = int(a[0] + (b[0]-a[0]) * t / steps)
-            py = int(a[1] + (b[1]-a[1]) * t / steps)
-            gx, gy = px // self._shrink, py // self._shrink
-            if not (0 <= gx < self._gw and 0 <= gy < self._gh): return False
-            if self._grid[gy, gx] == 0: return False
-        return True
+                frac = t / (n + 1)
+                out.append((int(a[0]+(b[0]-a[0])*frac),
+                           int(a[1]+(b[1]-a[1])*frac)))
+        out.append(path[-1])
+        return out
 
     @property
     def grid_size(self): return (self._gw, self._gh)
 
     def is_reachable(self, pixel: Tuple[int, int]) -> bool:
-        gx, gy = pixel[0] // self._shrink, pixel[1] // self._shrink
+        gx, gy = self._to_grid(*pixel)
         if 0 <= gx < self._gw and 0 <= gy < self._gh:
             return self._grid[gy, gx] == 255
         return False
