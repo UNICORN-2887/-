@@ -20,6 +20,6 @@ echo ============================================
 echo.
 
 :: 启动导航
-python navigator.py MazonAcademy_reachable.png --map MazonAcademy.jpg
+python navigator.py map/MazonAcademy/MazonAcademy_reachable.png --map map/MazonAcademy/MazonAcademy.jpg
 
 pause

@@ -1,10 +1,14 @@
 # 数据文件
 pic/
 *.jpg
-!MazonAcademy.jpg
+!map/MazonAcademy/MazonAcademy.jpg
+!map/Lakeview18/Lakeview18.jpg
+!map/BodegaBay/BodegaBay.jpg
 *.jpeg
 *.png
-!MazonAcademy_reachable.png
+!map/MazonAcademy/MazonAcademy_reachable.png
+!map/Lakeview18/Lakeview18_reachable.png
+!map/BodegaBay/BodegaBay_reachable.png
 cropped_*/
 
 # Python
@@ -23,7 +27,6 @@ label_studio/yolo_labels/
 .idea/
 
 # 模型
-models/
 *.pt
 !AImaneuver/runs/detect/deadmaze_combat/weights/best.pt
 !FastSAM-s.pt
@@ -32,11 +35,22 @@ models/
 # 临时
 *.json
 !label_studio/*.json
-!MazonAcademy_campfire.json
-!MazonAcademy_doors.json
+!map/MazonAcademy/MazonAcademy_campfire.json
+!map/MazonAcademy/MazonAcademy_doors.json
+!map/Lakeview18/Lakeview18_campfire.json
+!map/Lakeview18/Lakeview18_doors.json
+!map/BodegaBay/BodegaBay_campfire.json
+!map/BodegaBay/BodegaBay_doors.json
 !navigator_config.json
 !weapon_roi.json
 !AImaneuver/*.json
+!AImaneuver/*.json
+!skill_cooldowns.json
 
 # 配置文件（本地）
 map_stitcher_crop.json
+temp_snapshot.jpg
+
+# 工具 (仅保留变速版exe供下载)
+tools/*
+!tools/DeadMazeSteam加速版.exe

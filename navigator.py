@@ -203,11 +203,11 @@ class Navigator:
         pct = np.count_nonzero(self.grid) / (w2 * h2) * 100
         print(f"[网格] {w2}x{h2} shrink={SHRINK}px 可行走={pct:.1f}%")
 
-        # 火堆坐标
+        # 火堆坐标 (从可达图路径推导: xxx_reachable.png → xxx_campfire.json)
         base = os.path.splitext(reachable_path)[0]
-        cf_file = base + '_campfire.json'
+        cf_file = base.replace('_reachable', '_campfire') + '.json'
         if not os.path.exists(cf_file):
-            cf_file = 'map_output_campfire.json'
+            cf_file = base + '_campfire.json'  # 兼容旧命名
         self.home = None
         if os.path.exists(cf_file):
             with open(cf_file, encoding='utf-8') as f:
@@ -2366,8 +2366,8 @@ def _send_key_sequence(seq=None, interval=2.0):
 # ============================================================
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("reachable", nargs="?", default="MazonAcademy_reachable.png")
-    parser.add_argument("--map", default="MazonAcademy.jpg")
+    parser.add_argument("reachable", nargs="?", default="map/MazonAcademy/MazonAcademy_reachable.png")
+    parser.add_argument("--map", default="map/MazonAcademy/MazonAcademy.jpg")
     parser.add_argument("-c", "--camera", type=int, default=1)
     args = parser.parse_args()
 

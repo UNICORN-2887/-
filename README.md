@@ -26,7 +26,7 @@ run_navigator.bat
 ```bash
 pip install -r requirements.txt
 python config_server.py                    # → http://127.0.0.1:5050
-python navigator.py MazonAcademy_reachable.png --map MazonAcademy.jpg
+python navigator.py map/MazonAcademy/MazonAcademy_reachable.png --map map/MazonAcademy/MazonAcademy.jpg
 ```
 
 ## 🛠 环境要求
@@ -139,8 +139,11 @@ DeadMaze/
 ├── setup.bat                 # 一键安装
 ├── run_config.bat            # 启动配置中心
 ├── run_navigator.bat         # 启动导航
-├── MazonAcademy.jpg              # MazonAcademy 大地图
-├── MazonAcademy_reachable.png    # 可达区
-├── MazonAcademy_campfire.json    # 火堆坐标
-└── MazonAcademy_doors.json       # 门标记
+├── map/                          # 各地图目录
+│   ├── MazonAcademy/             # MazonAcademy 完整地图
+│   ├── Lakeview18/               # Lakeview18 完整地图
+│   ├── BodegaBay/                # BodegaBay (待标定)
+│   └── ...                       # 其他地图 (待玩家提交)
+├── tools/                        # 工具
+│   └── DeadMazeSteam加速版.exe    # 加速版插件 (可选)
 ```

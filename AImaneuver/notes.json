@@ -1,0 +1,101 @@
+{
+  "categories": [
+    {
+      "id": 0,
+      "name": "Bike"
+    },
+    {
+      "id": 1,
+      "name": "Box1"
+    },
+    {
+      "id": 2,
+      "name": "Box2"
+    },
+    {
+      "id": 3,
+      "name": "Campfire"
+    },
+    {
+      "id": 4,
+      "name": "CrawerZB"
+    },
+    {
+      "id": 5,
+      "name": "DeadTree1"
+    },
+    {
+      "id": 6,
+      "name": "ExploderZB"
+    },
+    {
+      "id": 7,
+      "name": "Firefighter"
+    },
+    {
+      "id": 8,
+      "name": "GoldBag"
+    },
+    {
+      "id": 9,
+      "name": "Hydrant"
+    },
+    {
+      "id": 10,
+      "name": "PerubianZB"
+    },
+    {
+      "id": 11,
+      "name": "PitcherZB"
+    },
+    {
+      "id": 12,
+      "name": "Psign"
+    },
+    {
+      "id": 13,
+      "name": "RockA"
+    },
+    {
+      "id": 14,
+      "name": "RockB"
+    },
+    {
+      "id": 15,
+      "name": "SimpleZB"
+    },
+    {
+      "id": 16,
+      "name": "Sleepbag"
+    },
+    {
+      "id": 17,
+      "name": "SlowerZB"
+    },
+    {
+      "id": 18,
+      "name": "SprinkerZB"
+    },
+    {
+      "id": 19,
+      "name": "SummonerZB"
+    },
+    {
+      "id": 20,
+      "name": "TreeShadow1"
+    },
+    {
+      "id": 21,
+      "name": "bag"
+    },
+    {
+      "id": 22,
+      "name": "ZombieE"
+    }
+  ],
+  "info": {
+    "year": 2026,
+    "version": "1.0",
+    "contributor": "Label Studio"
+  }
+}
