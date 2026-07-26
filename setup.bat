@@ -40,7 +40,10 @@ pip install -r requirements.txt -q
 if %errorlevel% neq 0 (
     echo.
     echo [WARN] Some packages failed, retrying individually...
-    pip install opencv-python numpy pywin32 easyocr pytesseract ultralytics flask mss pygrabber psutil
+    pip install opencv-python-headless opencv-python numpy pywin32 easyocr pytesseract ultralytics flask mss pygrabber psutil
+) else (
+    :: 确保GUI版opencv后装覆盖headless (easyocr等依赖headless但需要GUI)
+    pip install opencv-python -q 2>nul
 )
 echo.
 echo [OK] Dependencies installed
