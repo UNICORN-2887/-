@@ -49,33 +49,42 @@ def main():
     disp_w, disp_h = 1200, 800
 
     def draw_map():
-        disp = map_img.copy()
-        if start:
-            cv2.drawMarker(disp, start, (0, 255, 0),
-                           cv2.MARKER_CROSS, 30, 2)
-        if goal:
-            cv2.drawMarker(disp, goal, (0, 0, 255),
-                           cv2.MARKER_CROSS, 30, 2)
-        if navigating and nav.path:
-            for i, (x, y) in enumerate(nav.path):
-                cv2.circle(disp, (x, y), 2, (255, 0, 0), -1)
-            if nav.current_waypoint:
-                wx, wy = nav.current_waypoint
-                cv2.drawMarker(disp, (wx, wy), (0, 255, 255),
-                               cv2.MARKER_CROSS, 20, 2)
-        # 位置
-        if tracker:
-            tx, ty = tracker.position
-            cv2.circle(disp, (tx, ty), 8, (0, 255, 255), -1)
-            cv2.putText(disp, f"pos=({tx},{ty}) c={tracker.confidence:.2f}",
-                       (tx+10, ty-10), cv2.FONT_HERSHEY_SIMPLEX,
-                       0.4, (0, 255, 255), 1)
-        # 缩放显示
         nonlocal scale, disp_w, disp_h
-        h, w = disp.shape[:2]
+        # 缩小原图再画标记 (否则全尺寸下标记太小看不见)
+        h, w = map_img.shape[:2]
         scale = min(1200/w, 800/h, 1.0)
         disp_w, disp_h = int(w*scale), int(h*scale)
-        return cv2.resize(disp, (disp_w, disp_h))
+        disp = cv2.resize(map_img, (disp_w, disp_h))
+        r = max(1, int(scale))  # 显示缩放比, 用于调标记大小
+
+        if start:
+            sx, sy = int(start[0]*scale), int(start[1]*scale)
+            cv2.drawMarker(disp, (sx, sy), (0, 255, 0),
+                           cv2.MARKER_CROSS, 15, 2)
+            cv2.putText(disp, "S", (sx+10, sy-5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        if goal:
+            gx, gy = int(goal[0]*scale), int(goal[1]*scale)
+            cv2.drawMarker(disp, (gx, gy), (0, 0, 255),
+                           cv2.MARKER_CROSS, 15, 2)
+            cv2.putText(disp, "G", (gx+10, gy-5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        if navigating and nav.path:
+            for x, y in nav.path:
+                cv2.circle(disp, (int(x*scale), int(y*scale)),
+                           max(1, 2*r), (255, 0, 0), -1)
+            if nav.current_waypoint:
+                wx, wy = nav.current_waypoint
+                cv2.drawMarker(disp, (int(wx*scale), int(wy*scale)),
+                               (0, 255, 255), cv2.MARKER_CROSS, 12, 2)
+        if tracker:
+            tx, ty = tracker.position
+            cv2.circle(disp, (int(tx*scale), int(ty*scale)),
+                       max(3, 5*r), (0, 255, 255), -1)
+            txt = f"pos=({tx},{ty}) c={tracker.confidence:.2f}"
+            cv2.putText(disp, txt, (int(tx*scale)+10, int(ty*scale)-10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5*r, (0, 255, 255), 1)
+        return disp
 
     def on_mouse(event, x, y, flags, param):
         nonlocal start, goal, navigating, tracker, scale
