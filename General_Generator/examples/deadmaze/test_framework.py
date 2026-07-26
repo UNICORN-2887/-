@@ -3,9 +3,11 @@ import sys, os, cv2, numpy as np, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from game_automator.capture import OBSVideoCapture
 from game_automator.mapping import Pathfinder, PositionTracker
-from game_automator.navigation import Navigator
-from game_automator.driver import Actions
-from examples.deadmaze.driver import DeadMazeDriver
+from game_automator.navigation import Navigator, compute_direction
+
+# 直接用 DeadMaze 原版后台操控 (SendMessage WM_KEYDOWN)
+import sys; sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+from game_controller import DeadMazeController
 
 MAP_IMG = os.path.join(os.path.dirname(__file__), "..", "..", "..",
                        "map", "MazonAcademy", "MazonAcademy.jpg")
@@ -15,8 +17,43 @@ MAP_RCH = os.path.join(os.path.dirname(__file__), "..", "..", "..",
 def main():
     cap = OBSVideoCapture(cam_id=OBSVideoCapture.find_obs() or 1)
     pf = Pathfinder(MAP_RCH, shrink=8)
-    driver = DeadMazeDriver()
-    nav = Navigator(pf, driver, waypoint_reach=40)
+    nav = Navigator(pf, waypoint_reach=40)
+
+    # 用原版 DeadMazeController (SendMessage 后台操控)
+    ctrl = DeadMazeController()
+    ctrl.find_window()
+    print(f"[Ctrl] {ctrl.target_hwnd:#x}")
+
+    # 方向 → 按键映射 (同名 DeadMaze DIR_VECTORS)
+    DIR_KEYS = {
+        0: ['W'], 1: ['W','D'], 2: ['D'], 3: ['S','D'],
+        4: ['S'], 5: ['S','A'], 6: ['A'], 7: ['W','A'],
+    }
+    # 8方向向量 (同原版 best_direction)
+    DIR_VEC = [
+        ( 0,-1),( 1,-1),( 1, 0),( 1, 1),
+        ( 0, 1),(-1, 1),(-1, 0),(-1,-1),
+    ]
+
+    def best_dir(dx, dy):
+        best_i, best_dot = 0, -999
+        for i, (vx, vy) in enumerate(DIR_VEC):
+            d = vx*dx + vy*dy
+            if d > best_dot: best_dot, best_i = d, i
+        return best_i
+
+    def move_keys(dx, dy):
+        """发送方向键 (同原版 _move_8dir)."""
+        i = best_dir(dx, dy)
+        keys = DIR_KEYS[i]
+        vks = [getattr(ctrl, f'VK_{k}', ord(k)) for k in keys]
+        for vk in vks:
+            try: ctrl.key_down(vk)
+            except: pass
+        time.sleep(0.2)
+        for vk in vks:
+            try: ctrl.key_up(vk)
+            except: pass
     map_img = cv2.imread(MAP_IMG)
     mh, mw = map_img.shape[:2]
     scale = min(1200/mw, 800/mh, 1.0)
@@ -26,8 +63,6 @@ def main():
     navigating = False
     tracker = None
     frame_cnt = 0
-    last_action = None
-    last_action_time = 0
 
     def draw():
         disp = cv2.resize(map_img, (dw, dh))
@@ -80,35 +115,42 @@ def main():
 
         if navigating and not nav.arrived:
             frame_cnt += 1
-            # 光流追踪
+            # 光流追踪位置
             if tracker:
                 pos, conf = tracker.update(frame)
             else:
-                pos = start or (0,0)
+                pos = start or (0, 0)
 
-            action = nav.step(pos)
-            if action is not None:
-                if action != last_action or time.time() - last_action_time > 0.2:
-                    driver.execute(action, duration_ms=200)
-                    last_action = action
-                    last_action_time = time.time()
+            # 跳过已到达的路标
+            while nav._wp_index < len(nav.path):
+                tgt = nav.path[nav._wp_index]
+                if np.hypot(pos[0]-tgt[0], pos[1]-tgt[1]) < 40:
+                    nav._wp_index += 1
+                else:
+                    break
 
-            if frame_cnt % 20 == 0:
-                wp = nav.current_waypoint
-                print(f"[Nav] pos=({pos[0]},{pos[1]}) wp=({wp[0] if wp else '?'},{wp[1] if wp else '?'}) "
-                      f"a={action.name if action else '?'} {nav._wp_index}/{len(nav.path)}")
+            if nav._wp_index >= len(nav.path):
+                nav.arrived = True
+            else:
+                tgt = nav.path[nav._wp_index]
+                dx, dy = tgt[0]-pos[0], tgt[1]-pos[1]
+                move_keys(dx, dy)
+
+            if frame_cnt % 10 == 0:
+                tgt = nav.path[nav._wp_index] if nav._wp_index < len(nav.path) else pos
+                print(f"[Nav] pos=({pos[0]},{pos[1]}) tgt=({tgt[0]},{tgt[1]}) "
+                      f"dx={tgt[0]-pos[0]} dy={tgt[1]-pos[1]} wp={nav._wp_index}/{len(nav.path)}")
 
             if nav.arrived:
                 print(f"[Arrived!] ({pos[0]},{pos[1]})")
                 navigating = False
-                driver.release_all()
 
         if key == 13 and start and goal:
             navigating = True
-            nav.set_route(start, goal)
+            nav._wp_index = 0
             print(f"[Go!] {len(nav.path)}pts")
         elif key == 27:
-            navigating = False; driver.release_all(); print("[Stop]")
+            navigating = False; print("[Stop]")
         elif key == ord('q'):
             break
 
