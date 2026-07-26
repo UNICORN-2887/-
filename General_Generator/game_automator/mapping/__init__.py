@@ -146,20 +146,39 @@ class Pathfinder:
         if not (0 <= gg[0] < gw and 0 <= gg[1] < gh): return None
         raw = _astar(self._grid, gs, gg)
         if raw is None: return None
-        path = [(self._to_image(x, y)[0], self._to_image(x, y)[1]) for x, y in raw]
-        return self._resample(path)
+        # 转为像素坐标
+        px_path = [(self._to_image(x, y)[0], self._to_image(x, y)[1]) for x, y in raw]
+        # 先简化(删共线点) 再等距重采样
+        return self._simplify_resample(px_path)
 
-    def _resample(self, path, step=200):
-        if len(path) < 2: return path
-        out = [path[0]]
-        for i in range(len(path) - 1):
-            a, b = path[i], path[i+1]
+    def _simplify_resample(self, path, step=200):
+        """简化共线点 + 等距重采样."""
+        # 去重
+        dedup = [path[0]]
+        for p in path[1:]:
+            if p != dedup[-1]:
+                dedup.append(p)
+        if len(dedup) < 2:
+            return dedup
+        # 直线简化: 保留拐点
+        simplified = [dedup[0]]
+        for i in range(1, len(dedup) - 1):
+            a, b, c = simplified[-1], dedup[i], dedup[i + 1]
+            # 如果 a→b→c 方向变化 > 1px 则保留 b
+            v1 = (b[0]-a[0], b[1]-a[1])
+            v2 = (c[0]-b[0], c[1]-b[1])
+            if abs(v1[0] - v2[0]) > 2 or abs(v1[1] - v2[1]) > 2:
+                simplified.append(b)
+        simplified.append(dedup[-1])
+        # 等距重采样
+        out = [simplified[0]]
+        for i in range(len(simplified) - 1):
+            a, b = simplified[i], simplified[i+1]
             seg = np.hypot(b[0]-a[0], b[1]-a[1])
-            n = int(seg / step)
+            n = max(1, int(seg / step))
             for t in range(1, n + 1):
-                frac = t / (n + 1)
+                frac = t / n
                 out.append((int(a[0]+(b[0]-a[0])*frac), int(a[1]+(b[1]-a[1])*frac)))
-        out.append(path[-1])
         return out
 
     @property
