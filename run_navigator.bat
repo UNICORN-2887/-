@@ -1,5 +1,6 @@
 @echo off
 cd /d "%~dp0"
+call "%USERPROFILE%\miniconda3\Scripts\activate.bat" brain 2>nul
 setlocal enabledelayedexpansion
 
 echo ============================================
