@@ -383,9 +383,12 @@ class Pathfinder:
         raw = _astar(self._grid, gs, gg)
         if raw is None:
             return None
-        # 转回像素坐标 + 等距重采样
-        path = [self._to_image(x, y) for x, y in raw]
-        return self._resample(path)
+        # 转回像素坐标
+        path = [(self._to_image(x, y)[0], self._to_image(x, y)[1])
+                for x, y in raw]
+        print(f"[A*] raw_gr={len(raw)}pts pixel={len(path)}pts "
+              f"first={path[0]} last={path[-1]}")
+        return path  # 直接返回不重采样先
 
     def _resample(self, path: list, step: int = 200) -> list:
         if len(path) < 2:
