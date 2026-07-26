@@ -70,7 +70,7 @@ def main():
                            cv2.MARKER_CROSS, 15, 2)
             cv2.putText(disp, "G", (gx+10, gy-5),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-        if navigating and nav.path:
+        if nav.path:
             for x, y in nav.path:
                 cv2.circle(disp, (int(x*scale), int(y*scale)),
                            max(1, 2*r), (255, 0, 0), -1)
@@ -110,7 +110,7 @@ def main():
             print(f"[Goal] {goal}")
             if start and goal:
                 path = nav.set_route(start, goal)
-                print(f"[Path] {len(path)} points")
+                print(f"[Path] {len(path)} points: {path[:5]}{'...' if len(path)>5 else ''}")
 
     cv2.namedWindow("Integration Test", cv2.WINDOW_NORMAL)
     cv2.setMouseCallback("Integration Test", on_mouse)
@@ -127,8 +127,12 @@ def main():
 
         # 定位更新
         if navigating and tracker:
-            pos, conf = tracker.update(frame, verbose=True)
+            pos, conf = tracker.update(frame, verbose=False)
             action = nav.step(pos)
+            if frame_cnt % 30 == 0:
+                wp = nav.current_waypoint
+                print(f"[Nav] pos={pos} wp={wp} action={action.name if action else '?'} "
+                      f"idx={nav._wp_index}/{len(nav.path)}")
             if action:
                 driver.execute(action, duration_ms=150)
             if nav.arrived:
@@ -151,7 +155,8 @@ def main():
             if start and goal:
                 navigating = True
                 nav.set_route(start, goal)
-                print("[Navigate] Start!")
+                print(f"[Navigate] Start! Path={len(nav.path)}pts")
+                print(f"  Waypoints: {nav.path[:3]}{'...' if len(nav.path)>3 else ''}")
         elif key == 27:  # Esc
             navigating = False
             driver.release_all()
