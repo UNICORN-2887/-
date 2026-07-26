@@ -306,12 +306,16 @@ def _capture_frame():
         _live_cap = cv2.VideoCapture(cam_id, cv2.CAP_DSHOW)
         _live_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
         _live_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        _live_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # 最小缓冲避免旧帧
         # 预热: 读几帧让摄像头稳定
         for _ in range(5):
-            _live_cap.read()
+            _live_cap.grab()
 
     if _live_cap.isOpened():
-        ret, frame = _live_cap.read()
+        # 清空缓冲区取最新帧
+        for _ in range(3):
+            _live_cap.grab()
+        ret, frame = _live_cap.retrieve()
         if ret:
             _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
             return base64.b64encode(buf).decode()
