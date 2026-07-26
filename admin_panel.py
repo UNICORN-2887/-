@@ -132,10 +132,13 @@ load();
 
 class Handler(BaseHTTPRequestHandler):
     def _json(self, data, code=200):
+        body = json.dumps(data, ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header("Content-Type","application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
+        try: self.wfile.write(body)
+        except: pass
 
     def _html(self, html, code=200):
         self.send_response(code)
@@ -144,12 +147,14 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(html.encode())
 
     def do_GET(self):
+        if self.path.startswith("/favicon"):
+            self.send_response(204); self.end_headers(); return
         if self.path == "/":
             return self._html(HTML)
         if self.path == "/api/list":
             subs = fetch()
             return self._json({"subs": [{k:v for k,v in s.items() if k!='_data'} for s in subs]})
-        self._json({"error":"not found"}, 404)
+        self.send_response(404); self.end_headers()
 
     def do_POST(self):
         from urllib.parse import urlparse, parse_qs
