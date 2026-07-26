@@ -285,27 +285,37 @@ def _find_obs_cam():
         pass
     return 0  # 回退到0
 
+_live_cap = None  # 持久摄像头连接
+
 def _capture_frame():
-    """读取navigator主循环保存的共享截图, 返回base64 JPEG"""
+    """获取当前帧: 优先navigator共享截图 > 持久OBS摄像头 > 一次性摄像头"""
+    global _live_cap
     if not HAS_CV2:
         return None
     snap = os.path.join(os.path.dirname(__file__), "temp_snapshot.jpg")
-    if not os.path.exists(snap):
-        # 回退: 尝试自己打开OBS摄像头 (可能与navigator冲突)
-        cam_id = _find_obs_cam()
-        cap = cv2.VideoCapture(cam_id, cv2.CAP_DSHOW)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-        ret, frame = cap.read()
-        cap.release()
-        if not ret:
-            return None
-    else:
+    if os.path.exists(snap):
+        # navigator正在运行, 共享截图每10帧更新
         frame = cv2.imread(snap)
-        if frame is None:
-            return None
-    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-    return base64.b64encode(buf).decode()
+        if frame is not None:
+            _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            return base64.b64encode(buf).decode()
+
+    # 独立模式: 持久打开OBS摄像头 (不复用则每次都重新初始化太慢)
+    if _live_cap is None or not _live_cap.isOpened():
+        cam_id = _find_obs_cam()
+        _live_cap = cv2.VideoCapture(cam_id, cv2.CAP_DSHOW)
+        _live_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        _live_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        # 预热: 读几帧让摄像头稳定
+        for _ in range(5):
+            _live_cap.read()
+
+    if _live_cap.isOpened():
+        ret, frame = _live_cap.read()
+        if ret:
+            _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            return base64.b64encode(buf).decode()
+    return None
 
 def _load_rois():
     """加载所有ROI数据, 拆分为独立条目"""
