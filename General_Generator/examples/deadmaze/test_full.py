@@ -92,14 +92,18 @@ def main():
     print("L=Start R=Goal Enter=Go Esc=Stop Q=Quit")
 
     while True:
-        # 追踪
-        if tracker.need_click is False or tracker.last_position:
-            tracker.track()
-
         key = cv2.waitKey(30) & 0xFF
 
-        # 导航
-        if navigating and not nav.arrived and tracker.last_position:
+        # 追踪 (只在不导航时后台跑)
+        if not navigating:
+            if tracker.need_click is False or tracker.last_position:
+                tracker.track()
+
+        # 导航 (只追踪一次)
+        if navigating and not nav.arrived:
+            tracker.track()
+            if not tracker.last_position:
+                continue
             pos = tracker.last_position
             action = nav.step(pos)
 
