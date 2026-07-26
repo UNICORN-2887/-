@@ -45,7 +45,7 @@ def main():
     ctrl.find_window()
     print(f"      hwnd={ctrl.target_hwnd:#x}")
 
-    nav = Navigator(pf, waypoint_reach=25)
+    nav = Navigator(pf, waypoint_reach=25, lookahead=90)
 
     map_img = cv2.imread(MAP)
     mh, mw = map_img.shape[:2]
@@ -123,7 +123,7 @@ def main():
             for k in keys:
                 try: ctrl.key_down(getattr(ctrl, f'VK_{k}'))
                 except: pass
-            time.sleep(0.3)
+            time.sleep(0.5)  # DeadMaze MOVE_DURATION default
             for k in keys:
                 try: ctrl.key_up(getattr(ctrl, f'VK_{k}'))
                 except: pass

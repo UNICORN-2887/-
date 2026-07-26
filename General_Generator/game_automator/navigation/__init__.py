@@ -63,10 +63,12 @@ class Navigator:
                  pathfinder: Pathfinder,
                  driver: Optional[AbstractDriver] = None,
                  waypoint_reach: int = 25,
+                 lookahead: int = 90,
                  move_duration_ms: int = 300):
         self._pf = pathfinder
         self._driver = driver
         self.waypoint_reach = waypoint_reach
+        self.lookahead = lookahead
         self.move_duration_ms = move_duration_ms
 
         self._path: List[Tuple[int, int]] = []
@@ -96,7 +98,7 @@ class Navigator:
             self.arrived = True
             return None
 
-        # Skip waypoints we're already close to
+        # 跳过已到达的路标
         while self._wp_index < len(self._path):
             tgt = self._path[self._wp_index]
             if np.hypot(current_pos[0]-tgt[0], current_pos[1]-tgt[1]) < self.waypoint_reach:
@@ -108,7 +110,18 @@ class Navigator:
             self.arrived = True
             return None
 
-        return compute_direction(current_pos, self._path[self._wp_index])
+        # 向前看: 沿路径累积距离找到 lookahead 距离外的目标点
+        acc = 0.0
+        idx = self._wp_index
+        prev = current_pos
+        while idx < len(self._path) and acc < self.lookahead:
+            p = self._path[idx]
+            acc += np.hypot(p[0]-prev[0], p[1]-prev[1])
+            prev = p
+            idx += 1
+        target = self._path[min(idx, len(self._path)-1)]
+
+        return compute_direction(current_pos, target)
 
     def _deviation_distance(self, pos):
         if self._wp_index >= len(self._path):
