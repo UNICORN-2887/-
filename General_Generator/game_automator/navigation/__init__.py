@@ -63,11 +63,13 @@ class Navigator:
                  pathfinder: Pathfinder,
                  driver: Optional[AbstractDriver] = None,
                  waypoint_reach: int = 25,
+                 goal_reach: int = 100,
                  lookahead: int = 90,
                  move_duration_ms: int = 300):
         self._pf = pathfinder
         self._driver = driver
         self.waypoint_reach = waypoint_reach
+        self.goal_reach = goal_reach
         self.lookahead = lookahead
         self.move_duration_ms = move_duration_ms
 
@@ -94,7 +96,13 @@ class Navigator:
 
     def step(self, current_pos: Tuple[int, int]) -> Optional[Actions]:
         """传入当前位置, 返回应执行的动作 (None=到达)."""
-        if not self._path or self._wp_index >= len(self._path):
+        if not self._path:
+            self.arrived = True
+            return None
+
+        # 距终点 < goal_reach → 到达
+        last = self._path[-1]
+        if np.hypot(current_pos[0]-last[0], current_pos[1]-last[1]) < self.goal_reach:
             self.arrived = True
             return None
 

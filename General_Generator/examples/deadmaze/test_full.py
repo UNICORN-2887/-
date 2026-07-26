@@ -30,7 +30,7 @@ def main():
     ctrl.find_window()
     print(f"[CT] hwnd={ctrl.target_hwnd:#x}")
 
-    nav = Navigator(pf, waypoint_reach=25, lookahead=90)
+    nav = Navigator(pf, waypoint_reach=25, goal_reach=100, lookahead=90)
     img = cv2.imread(MAP)
     mh, mw = img.shape[:2]
     s = min(1200/mw, 800/mh, 1.0)
