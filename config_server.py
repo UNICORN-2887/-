@@ -37,7 +37,7 @@ DEFAULTS = {
     "attack_range": 130, "chase_timeout": 7, "low_stat_thr": 15,
     "heal_hp": 80, "escape_hp": 20, "combat_entry_hp": 70,
     "max_zombies": 6, "weapon_tol": 20, "weapon_thr": 0.3,
-    "weapon_check": 15, "return_thr": 15,
+    "weapon_check": 15,
     "skill1_cd": 4, "skill2_cd": 12, "skill3_cd": 22, "skill4_cd": 32,
     "launcher_path": "", "pushplus_token": "",
     "game_path": "", "obs_cam_id": 1,
@@ -86,10 +86,9 @@ HTML = r'''
 <div class="row"><label>Max Zombies</label><input type="range" id="max_zombies" min="1" max="20"><span class="val"></span><input type="number"><span class="desc">进入战斗的最大僵尸数</span></div>
 
 <h2>STATUS 状态</h2>
-<div class="row"><label>Low Stat Thr</label><input type="range" id="low_stat_thr" min="1" max="100"><span class="val"></span><input type="number"><span class="desc">H/T/S低于此值触发返航</span></div>
+<div class="row"><label>Low Stat Thr</label><input type="range" id="low_stat_thr" min="1" max="100"><span class="val"></span><input type="number"><span class="desc">H/T/S低于此值触发返航 (O/P快捷键调)</span></div>
 <div class="row"><label>Heal HP%</label><input type="range" id="heal_hp" min="20" max="100"><span class="val"></span><input type="number"><span class="desc">HP低于此值用skill_2补血</span></div>
 <div class="row"><label>Escape HP%</label><input type="range" id="escape_hp" min="5" max="50"><span class="val"></span><input type="number"><span class="desc">HP低于此值空格脱战</span></div>
-<div class="row"><label>Return Thr</label><input type="range" id="return_thr" min="1" max="100"><span class="val"></span><input type="number"><span class="desc">等同于Low Stat(O/P快捷键)</span></div>
 
 <h2>SKILLS 技能冷却</h2>
 <div class="row"><label>Skill 1 CD (s)</label><input type="range" id="skill1_cd" min="1" max="60"><span class="val"></span><input type="number"><span class="desc">技能1冷却(战斗技能)</span></div>
@@ -121,7 +120,7 @@ HTML = r'''
 <script>
 const ids = ["waypoint_reach","deviation","move_dur","goal_reach","lookahead",
   "zombie_range","attack_range","chase_timeout","combat_entry_hp","max_zombies",
-  "low_stat_thr","heal_hp","escape_hp","return_thr",
+  "low_stat_thr","heal_hp","escape_hp",
   "skill1_cd","skill2_cd","skill3_cd","skill4_cd",
   "weapon_tol","weapon_thr","weapon_check","launcher_path","pushplus_token","game_path"];
 function sync(r){
