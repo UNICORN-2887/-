@@ -32,18 +32,19 @@ def compute_direction(from_pos: Tuple[int, int],
     dx = to_pos[0] - from_pos[0]
     dy = to_pos[1] - from_pos[1]
     if dx == 0 and dy == 0:
-        return Actions.MOVE_N  # idle
-    # 归一化到 (-1,0,1)
-    ix = np.sign(dx)
-    iy = np.sign(dy)
-    # 检查对角 vs 正交
-    diag = (ix, iy)
-    if diag in _DIRECTION_MAP:
-        return _DIRECTION_MAP[diag]
-    # fallback: 选偏大的轴
-    if abs(dx) > abs(dy):
-        return _DIRECTION_MAP[(ix, 0)]
-    return _DIRECTION_MAP[(0, iy)]
+        return None  # 已到达
+    # 选主导轴 (比例大于2:1就只走单轴)
+    if abs(dx) > abs(dy) * 2:
+        k = (int(np.sign(dx)), 0)
+    elif abs(dy) > abs(dx) * 2:
+        k = (0, int(np.sign(dy)))
+    else:
+        k = (int(np.sign(dx)), int(np.sign(dy)))
+    act = _DIRECTION_MAP.get(k)
+    if act is None:
+        print(f"[Dir] MISS {k} from ({from_pos[0]},{from_pos[1]})→({to_pos[0]},{to_pos[1]}) dx={dx} dy={dy}")
+        act = Actions.MOVE_N
+    return act
 
 
 # ── 导航控制器 ────────────────────────────────
