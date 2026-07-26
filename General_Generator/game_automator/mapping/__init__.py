@@ -346,7 +346,10 @@ class Pathfinder:
                     current = came_from[current]
                     path.append(self._to_pixel(current))
                 path.reverse()
-                return self._smooth(path)
+                print(f"[A*] raw={len(path)}pts first={path[0]} last={path[-1]}")
+                result = self._smooth(path)
+                print(f"[A*] smooth={len(result)}pts {result[:3]}...")
+                return result
 
             for dx, dy in self.NEIGHBORS:
                 nb = (current[0]+dx, current[1]+dy)
@@ -365,9 +368,11 @@ class Pathfinder:
 
     def _smooth(self, path: list) -> list:
         """简化路径 + 等距重采样确保有中间导航点."""
+        print(f"[Smooth] in={len(path)}pts")
         if len(path) <= 2:
-            # 路径太短也要重采样
-            return self._resample(path)
+            r = self._resample(path)
+            print(f"[Smooth] short→resample={len(r)}pts")
+            return r
         # 先轻量平滑
         result = [path[0]]
         i = 1
@@ -391,6 +396,7 @@ class Pathfinder:
         if len(path) < 2:
             return path
         resampled = [path[0]]
+        added = 0
         for idx in range(len(path) - 1):
             a, b = path[idx], path[idx + 1]
             seg = np.hypot(b[0] - a[0], b[1] - a[1])
@@ -399,6 +405,8 @@ class Pathfinder:
                 frac = t / n
                 resampled.append((int(a[0] + (b[0]-a[0])*frac),
                                   int(a[1] + (b[1]-a[1])*frac)))
+                added += 1
+        print(f"[Resample] in={len(path)} out={len(resampled)} added={added}")
         return resampled
 
     def _line_clear(self, a, b):
