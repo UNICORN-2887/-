@@ -1,5 +1,45 @@
 # CHANGELOG
 
+## 2026-07-27 — 框架封装 + 地图审核 + 网站整合 + 问题修复
+
+### game-automator 框架
+- 新增 `GameAutomator` 封装类 — 三行代码完成寻路导航
+- `Navigator` 加 lookahead(90px) + goal_reach(100px) + 卡住检测
+- `PositionTracker` 改为 LK 光流追踪 (goodFeaturesToTrack + calcOpticalFlowPyrLK)
+- CLI 新增 `game-automator reachable` 命令 (可达区标定)
+- `Navigator.step()` 完全对齐 DeadMaze `navigate_step()` 时序
+
+### 地图审核系统
+- 新增 `admin_panel.py` — 网页审核面板 (http://127.0.0.1:8888)
+- 自动扫描 QQ 邮箱 [DeadMaze提交] 标题邮件
+- Message-ID 去重 + 批准即解压到 map/ 目录
+- 新增 `admin_review.py` — 终端审核工具
+
+### 项目整理
+- 地图文件重命名为 MazonAcademy/Lakeview18 系列
+- 创建 map/ 目录，11 个地图子文件夹
+- 文件归类: OBS_profiles/ / tools/ / test/
+- 删除旧备份和临时文件
+- 软著申请文件加入 .gitignore (含个人信息)
+
+### 网站 (blog.219882.xyz)
+- 新增 "纯光流建图寻路框架" 页面 (game-automator)
+- Mermaid 架构图 + 模块职责表 + CLI 命令表
+- DeadMaze 网站加 OBS 场景配置说明 + 地图下载页 + 提交页
+- 导航栏 "链接" 菜单整合三个项目
+- 标定网页说明加摄像头选择
+
+### Bug 修复
+- OpenCV GUI 冲突: easyocr 等包强制依赖 headless → setup.bat 后装 opencv-python 覆盖
+- 批处理中文乱码 → 全部改为 ASCII
+- run_*.bat 加 conda activate brain (PowerShell 用错 Python)
+- 删除死滑块 return_thr (实际用 low_stat_thr)
+- compute_direction 改回 DeadMaze best_direction 内积法
+- _resample 重采样修复 4px 细网格全跳过
+- cv2.destroyAllWindows() 加 try/except 保护
+
+---
+
 ## 2026-07-26 — 标定中心 + PushPlus + 一键部署 + 官网文档
 
 ### 标定中心 `/calibrate`

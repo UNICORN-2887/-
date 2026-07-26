@@ -104,29 +104,29 @@ h1{color:#0ff}h1 span{color:#3b82f6}
 .btn-refresh{background:#555;color:#fff;margin-bottom:16px}
 .status{margin-top:6px;font-size:12px}
 </style></head><body>
-<h1><span>DeadMaze</span> Map Review</h1>
-<p style="color:#888;font-size:12px;margin-bottom:16px">Scanning QQ mailbox for [DeadMaze提交] submissions</p>
-<button class="btn btn-refresh" onclick="location.reload()">Refresh</button>
-<div id="list">Loading...</div>
+<h1><span>DeadMaze</span> 地图审核</h1>
+<p style="color:#888;font-size:12px;margin-bottom:16px">扫描 QQ 邮箱中 [DeadMaze提交] 标题的邮件</p>
+<button class="btn btn-refresh" onclick="location.reload()">🔄 刷新</button>
+<div id="list">加载中...</div>
 <script>
 async function load(){
  let r=await fetch('/api/list');let j=await r.json();
- if(!j.subs||!j.subs.length){document.getElementById('list').innerHTML='<p style="color:#888">No pending submissions</p>';return}
+ if(!j.subs||!j.subs.length){document.getElementById('list').innerHTML='<p style="color:#888">暂无待审核提交</p>';return}
  let h='';
  j.subs.forEach((s,i)=>{
   h+=`<div class="card">
    <div class="n">${s.map}</div>
-   <div class="m">Author: ${s.author} | Version: ${s.version}</div>
-   <div class="f">Files: ${s.files.map(f=>f[0]+' ('+(f[1]/1024).toFixed(0)+'KB)').join(', ')}</div>
-   <button class="btn btn-ok" onclick="act(${i},'approve')">Approve (extract to map/)</button>
-   <button class="btn btn-no" onclick="act(${i},'reject')">Reject</button>
+   <div class="m">作者: ${s.author} | 版本: ${s.version}</div>
+   <div class="f">附件: ${s.files.map(f=>f[0]+' ('+(f[1]/1024).toFixed(0)+'KB)').join(', ')}</div>
+   <button class="btn btn-ok" onclick="act(${i},'approve')">✅ 批准 (解压到map/)</button>
+   <button class="btn btn-no" onclick="act(${i},'reject')">❌ 拒绝</button>
    <div class="status" id="s${i}"></div>
   </div>`;
  });
  document.getElementById('list').innerHTML=h;
 }
 async function act(i,a){
- document.getElementById('s'+i).textContent='Processing...';
+ document.getElementById('s'+i).textContent='处理中...';
  let r=await fetch('/api/'+a+'?id='+i,{method:'POST'});
  let j=await r.json();
  document.getElementById('s'+i).textContent=j.ok||j.error;

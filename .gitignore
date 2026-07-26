@@ -54,3 +54,6 @@ temp_snapshot.jpg
 # 工具 (仅保留变速版exe供下载)
 tools/*
 !tools/DeadMazeSteam加速版.exe
+
+# 软著申请（含个人信息，不上传）
+软著申请/
