@@ -35,7 +35,7 @@ def main():
     print(f"[Grid] {pf.grid_size}")
 
     driver = DeadMazeDriver()
-    nav = Navigator(pf, driver, waypoint_reach=80, deviation_threshold=150, stuck_timeout=3.0)
+    nav = Navigator(pf, driver, waypoint_reach=20)
 
     map_img = cv2.imread(MAP_IMG)
     if map_img is None:

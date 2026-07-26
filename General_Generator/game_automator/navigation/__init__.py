@@ -64,24 +64,16 @@ class Navigator:
                  pathfinder: Pathfinder,
                  driver: Optional[AbstractDriver] = None,
                  waypoint_reach: int = 25,
-                 deviation_threshold: int = 100,
-                 move_duration_ms: int = 300,
-                 stuck_timeout: float = 3.0,
-                 stuck_distance: float = 30.0):
+                 move_duration_ms: int = 300):
         self._pf = pathfinder
         self._driver = driver
         self.waypoint_reach = waypoint_reach
-        self.deviation_threshold = deviation_threshold
         self.move_duration_ms = move_duration_ms
-        self.stuck_timeout = stuck_timeout    # 秒, 卡住检测时间
-        self.stuck_distance = stuck_distance  # px, 超时后位移<此值=卡住
 
         self._path: List[Tuple[int, int]] = []
         self._wp_index = 0
         self._goal: Optional[Tuple[int, int]] = None
         self.arrived = False
-        self._stuck_pos = None  # 卡住检测起始
-        self._stuck_time = 0.0
 
     # ── 设置 ──────────────────────────────────
     def set_route(self, start: Tuple[int, int],
@@ -99,54 +91,25 @@ class Navigator:
         self._goal = waypoints[-1] if waypoints else None
         self.arrived = False
 
-    # ── 步进 ──────────────────────────────────
     def step(self, current_pos: Tuple[int, int]) -> Optional[Actions]:
         """传入当前位置, 返回应执行的动作 (None=到达)."""
-        import time
-        if self.arrived or not self._path or self._wp_index >= len(self._path):
+        if not self._path or self._wp_index >= len(self._path):
             self.arrived = True
             return None
 
-        # ── 卡住检测 ──
-        if (self._stuck_pos and self._stuck_time and
-                self._goal and self._pf.is_reachable(current_pos)):
-            elapsed = time.time() - self._stuck_time
-            moved = np.hypot(current_pos[0] - self._stuck_pos[0],
-                              current_pos[1] - self._stuck_pos[1])
-            if elapsed > self.stuck_timeout and moved < self.stuck_distance:
-                print(f"[Nav] 卡住! 重规划...")
-                self._path = self._pf.plan(current_pos, self._goal) or self._path
-                self._wp_index = 0
-                self._stuck_pos = None
-        # 更新卡住检测起点
-        if not self._stuck_pos:
-            self._stuck_pos = current_pos
-            self._stuck_time = time.time()
+        # Skip waypoints we're already close to
+        while self._wp_index < len(self._path):
+            tgt = self._path[self._wp_index]
+            if np.hypot(current_pos[0]-tgt[0], current_pos[1]-tgt[1]) < self.waypoint_reach:
+                self._wp_index += 1
+            else:
+                break
 
-        target = self._path[self._wp_index]
-        dist = np.hypot(current_pos[0] - target[0],
-                         current_pos[1] - target[1])
+        if self._wp_index >= len(self._path):
+            self.arrived = True
+            return None
 
-        # 到达当前路标 → 下一个
-        if dist < self.waypoint_reach:
-            self._wp_index += 1
-            self._stuck_pos = None  # 重置检测
-            if self._wp_index >= len(self._path):
-                self.arrived = True
-                return None
-            target = self._path[self._wp_index]
-
-        # 偏离路径检查
-        dev = self._deviation_distance(current_pos)
-        if dev > self.deviation_threshold and self._wp_index > 0:
-            self._wp_index = 0
-            self._path = self._pf.plan(current_pos, self._goal) or self._path
-            self._stuck_pos = None
-
-        act = compute_direction(current_pos, target)
-        if act is None:
-            print(f"[Nav] compute_dir NONE! pos={current_pos} target={target}")
-        return act
+        return compute_direction(current_pos, self._path[self._wp_index])
 
     def _deviation_distance(self, pos):
         if self._wp_index >= len(self._path):
