@@ -364,9 +364,10 @@ class Pathfinder:
     def _to_pixel(self, grid): return (grid[0] * self._shrink, grid[1] * self._shrink)
 
     def _smooth(self, path: list) -> list:
-        """贝塞尔平滑中间点."""
+        """简化路径 + 等距重采样确保有中间导航点."""
         if len(path) <= 2:
             return path
+        # 先轻量平滑
         result = [path[0]]
         i = 1
         while i < len(path) - 1:
@@ -381,6 +382,20 @@ class Pathfinder:
                 result.append(path[i])
                 i += 1
         result.append(path[-1])
+
+        # 等距重采样: 每 ~200px 一个点, 保证导航有中间路标
+        if len(result) <= 2:
+            resampled = [result[0]]
+            step = 200
+            for idx in range(len(result) - 1):
+                a, b = result[idx], result[idx + 1]
+                seg = np.hypot(b[0] - a[0], b[1] - a[1])
+                n = max(1, int(seg / step))
+                for t in range(1, n + 1):
+                    frac = t / n
+                    resampled.append((int(a[0] + (b[0]-a[0])*frac),
+                                      int(a[1] + (b[1]-a[1])*frac)))
+            result = resampled
         return result
 
     def _line_clear(self, a, b):

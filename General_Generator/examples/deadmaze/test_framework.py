@@ -31,11 +31,11 @@ def main():
     cap = OBSVideoCapture(cam_id=cam_id)
     cap.warmup(5)
 
-    pf = Pathfinder(MAP_RCH, shrink=80)
+    pf = Pathfinder(MAP_RCH, shrink=40)
     print(f"[Grid] {pf.grid_size}")
 
     driver = DeadMazeDriver()
-    nav = Navigator(pf, driver)
+    nav = Navigator(pf, driver, waypoint_reach=50, stuck_timeout=2.0)
 
     map_img = cv2.imread(MAP_IMG)
     if map_img is None:
