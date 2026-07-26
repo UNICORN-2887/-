@@ -119,6 +119,98 @@ class ReachabilityEditor:
         return overlay
 
 
+# ── ORB 实时定位 ────────────────────────────
+class PositionTracker:
+    """ORB 特征匹配实时定位追踪.
+
+    Usage:
+        tracker = PositionTracker("map.jpg", start_pos=(5000, 6000))
+        tracker.set_reference(cap.read())
+        while moving:
+            pos, conf = tracker.update(cap.read())
+    """
+
+    def __init__(self, map_img_path: str, start_pos: Tuple[int, int]):
+        self._position = list(start_pos)
+        self._total_dx = 0.0
+        self._total_dy = 0.0
+        self._ref_gray = None
+        self._orb = cv2.ORB_create(nfeatures=1500)
+        self._matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+        self._last_conf = 0.0
+
+        # 预加载地图 (用于金字塔匹配重定位)
+        self._map_img = cv2.imread(map_img_path)
+        if self._map_img is not None:
+            self._map_gray = cv2.cvtColor(self._map_img, cv2.COLOR_BGR2GRAY)
+
+    # ── 核心 ────────────────────────────────
+    def set_reference(self, frame: np.ndarray) -> None:
+        """设定参考帧 (在地图上点击确认位置后调用)."""
+        self._ref_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        self._total_dx = 0.0
+        self._total_dy = 0.0
+
+    def update(self, frame: np.ndarray
+               ) -> Tuple[Tuple[int, int], float]:
+        """返回 (当前位置, 置信度). 置信度<0.3 表示可能丢失."""
+        if self._ref_gray is None:
+            self.set_reference(frame)
+            return (tuple(self._position), 0.0)
+
+        curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # ORB 计算位移
+        kp1, des1 = self._orb.detectAndCompute(self._ref_gray, None)
+        kp2, des2 = self._orb.detectAndCompute(curr_gray, None)
+
+        dx, dy, conf = 0.0, 0.0, 0.0
+        if des1 is not None and des2 is not None and len(des1) >= 8 and len(des2) >= 8:
+            matches = self._matcher.knnMatch(des1, des2, k=2)
+            good = [m for m, n in matches
+                     if m.distance < 0.75 * n.distance]
+            if len(good) >= 6:
+                dx_list, dy_list = [], []
+                for m in good:
+                    p1 = kp1[m.queryIdx].pt
+                    p2 = kp2[m.trainIdx].pt
+                    dx_list.append(p2[0] - p1[0])
+                    dy_list.append(p2[1] - p1[1])
+                dx = np.median(dx_list)
+                dy = np.median(dy_list)
+                inliers = sum(1 for ddx, ddy in zip(dx_list, dy_list)
+                               if abs(ddx-dx) < 5 and abs(ddy-dy) < 5)
+                conf = inliers / len(dx_list) if dx_list else 0.0
+                dx, dy = -dx, -dy
+
+        self._last_conf = conf
+        if conf > 0.3:
+            self._total_dx += dx
+            self._total_dy += dy
+            self._position[0] -= int(dx)
+            self._position[1] -= int(dy)
+
+        # 更新参考帧 (低通防止漂移)
+        if conf > 0.5:
+            self._ref_gray = curr_gray
+
+        return (tuple(self._position), conf)
+
+    def reset_position(self, new_pos: Tuple[int, int]) -> None:
+        """手动重置位置 (用户在地图上点击后)."""
+        self._position = list(new_pos)
+        self._total_dx = 0.0
+        self._total_dy = 0.0
+
+    @property
+    def position(self) -> Tuple[int, int]:
+        return tuple(self._position)
+
+    @property
+    def confidence(self) -> float:
+        return self._last_conf
+
+
 # ── A* 寻路 ──────────────────────────────────
 class Pathfinder:
     """A* 寻路器.
