@@ -2376,7 +2376,8 @@ def main():
         sys.exit(1)
 
     # ★ 清理残留窗口（防止双窗口问题）
-    cv2.destroyAllWindows()
+    try: cv2.destroyAllWindows()
+    except: pass
 
     nav = Navigator(args.reachable, args.map, args.camera)
 
@@ -2761,7 +2762,8 @@ def main():
                 nav.navigate_step()
                 last_nav = now
 
-    cv2.destroyAllWindows()
+    try: cv2.destroyAllWindows()
+    except: pass
 
 
 if __name__ == "__main__":

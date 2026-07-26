@@ -1,6 +1,7 @@
 # DeadMaze - 一键安装依赖
 
 # 核心 (OpenCV + NumPy)
+# 注意: 必须用 opencv-python (带GUI), 不要用 opencv-python-headless
 opencv-python>=4.8.0
 numpy>=1.24.0
 
