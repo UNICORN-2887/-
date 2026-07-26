@@ -343,7 +343,10 @@ class Pathfinder:
         while open_set:
             _, current = heapq.heappop(open_set)
             visited += 1
+            if visited == 1:
+                print(f"[A*] first pop: current={current} gg={gg} same={current == gg}")
             if current == gg:
+                print(f"[A*] FOUND current={current} gg={gg} visited={visited}")
                 path = [self._to_pixel(gg)]
                 while current in came_from:
                     current = came_from[current]
@@ -354,16 +357,20 @@ class Pathfinder:
                 print(f"[A*] smooth={len(result)}pts {result[:3]}...")
                 return result
 
+            neigh_count = 0
             for dx, dy in self.NEIGHBORS:
                 nb = (current[0]+dx, current[1]+dy)
                 if not (0 <= nb[0] < gw and 0 <= nb[1] < gh): continue
                 if self._grid[nb[1], nb[0]] == 0: continue
+                neigh_count += 1
                 cost = 1.4 if dx and dy else 1.0
                 tentative = g_score[current] + cost
                 if nb not in g_score or tentative < g_score[nb]:
                     g_score[nb] = tentative
                     h = np.hypot(nb[0]-gg[0], nb[1]-gg[1])
                     heapq.heappush(open_set, (tentative + h, nb))
+            if visited == 1:
+                print(f"[A*] first pop: {neigh_count} reachable neighbors")
         print(f"[A*] FAILED after {visited} visits, open_set empty")
         return None
 
