@@ -125,7 +125,12 @@ def main():
                 navigating = False
                 driver.release_all()
             if conf < 0.2:
-                print("[WARN] 定位丢失!")
+                print("[WARN] 定位丢失, 尝试重定位...")
+                ok, c = tracker.relocalize(frame)
+                if ok:
+                    print(f"[OK] 重定位成功 c={c:.2f}")
+                else:
+                    print(f"[FAIL] 重定位失败 c={c:.2f}")
 
         canvas = draw_map()
         cv2.imshow("Integration Test", canvas)

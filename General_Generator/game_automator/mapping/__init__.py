@@ -206,6 +206,63 @@ class PositionTracker:
     def position(self) -> Tuple[int, int]:
         return tuple(self._position)
 
+    def relocalize(self, frame: np.ndarray,
+                    search_radius: int = 300) -> Tuple[bool, float]:
+        """在当前位置附近搜索地图匹配, 恢复定位.
+
+        当帧间追踪置信度低时调用此方法,
+        在当前位置 ±search_radius 范围内金字塔搜索最佳匹配.
+
+        Returns (success, confidence).
+        """
+        if self._map_gray is None:
+            return False, 0.0
+
+        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        fh, fw = frame_gray.shape
+        mh, mw = self._map_gray.shape
+
+        best_score = 0.0
+        best_dx, best_dy = 0, 0
+
+        # 金字塔搜索: scale 0.3 ~ 1.0
+        for s in [0.3, 0.5, 0.7, 1.0]:
+            nw, nh = int(fw * s), int(fh * s)
+            if nw < 20 or nh < 20:
+                continue
+            template = cv2.resize(frame_gray, (nw, nh))
+            # 搜索范围
+            cx, cy = self._position
+            r = search_radius
+            x1 = max(0, int(cx - r))
+            y1 = max(0, int(cy - r))
+            x2 = min(mw - nw, int(cx + r))
+            y2 = min(mh - nh, int(cy + r))
+            if x2 <= x1 or y2 <= y1:
+                continue
+
+            roi = self._map_gray[y1:y2, x1:x2]
+            if roi.shape[0] < nh or roi.shape[1] < nw:
+                continue
+
+            result = cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(result)
+            if max_val > best_score:
+                best_score = max_val
+                best_dx = x1 + max_loc[0] - cx
+                best_dy = y1 + max_loc[1] - cy
+
+        if best_score > 0.4:
+            self._position[0] += best_dx
+            self._position[1] += best_dy
+            self._total_dx = 0.0
+            self._total_dy = 0.0
+            self.set_reference(frame)
+            self._last_conf = best_score
+            return True, best_score
+
+        return False, best_score
+
     @property
     def confidence(self) -> float:
         return self._last_conf
