@@ -20,6 +20,7 @@ import time
 import argparse
 import json
 import os
+import ctypes
 
 import cv2
 import numpy as np
@@ -356,9 +357,8 @@ def main():
                 md = cv2.resize(md, (int(mw * scale), int(mh * scale)))
             cv2.imshow("拼接地图", md)
 
-        raw_key = cv2.waitKeyEx(1)
-        key = raw_key & 0xFF
-        _shift = bool(raw_key & 0x10000)  # Shift修饰键
+        key = cv2.waitKey(1) & 0xFF
+        _shift = ctypes.windll.user32.GetAsyncKeyState(0x10) & 0x8000 != 0  # VK_SHIFT
 
         # ---- 拼接 ----
         if key == ord('c') or key == ord('C'):
