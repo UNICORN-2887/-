@@ -123,10 +123,11 @@ def main():
             for k in keys:
                 try: ctrl.key_down(getattr(ctrl, f'VK_{k}'))
                 except: pass
-            time.sleep(0.5)  # DeadMaze MOVE_DURATION default
+            time.sleep(0.5)  # MOVE_DURATION
             for k in keys:
                 try: ctrl.key_up(getattr(ctrl, f'VK_{k}'))
                 except: pass
+            time.sleep(0.3)  # TRACK_INTERVAL: 等追踪器稳定再算下一帧
 
             frame_cnt += 1
             if frame_cnt % 10 == 0:
