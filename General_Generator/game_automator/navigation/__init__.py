@@ -143,7 +143,10 @@ class Navigator:
             self._path = self._pf.plan(current_pos, self._goal) or self._path
             self._stuck_pos = None
 
-        return compute_direction(current_pos, target)
+        act = compute_direction(current_pos, target)
+        if act is None:
+            print(f"[Nav] compute_dir NONE! pos={current_pos} target={target}")
+        return act
 
     def _deviation_distance(self, pos):
         if self._wp_index >= len(self._path):

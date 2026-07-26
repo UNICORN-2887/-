@@ -139,8 +139,8 @@ def main():
                 wp = nav.current_waypoint
                 print(f"[Nav] pos={pos} wp={wp} action={action.name if action else '?'} "
                       f"idx={nav._wp_index}/{len(nav.path)}")
-            if action:
-                driver.execute(action, duration_ms=150)
+            if action is not None:
+                driver.execute(action, duration_ms=200)
             if nav.arrived:
                 print("[Arrived!]")
                 navigating = False
