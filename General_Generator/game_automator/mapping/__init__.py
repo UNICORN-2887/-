@@ -337,9 +337,12 @@ class Pathfinder:
         open_set = [(0, gs)]
         came_from = {}
         g_score = {gs: 0}
+        visited = 0
 
+        print(f"[A*] start_gr={gs} goal_gr={gg} grid={gw}x{gh}")
         while open_set:
             _, current = heapq.heappop(open_set)
+            visited += 1
             if current == gg:
                 path = [self._to_pixel(gg)]
                 while current in came_from:
@@ -361,6 +364,7 @@ class Pathfinder:
                     g_score[nb] = tentative
                     h = np.hypot(nb[0]-gg[0], nb[1]-gg[1])
                     heapq.heappush(open_set, (tentative + h, nb))
+        print(f"[A*] FAILED after {visited} visits, open_set empty")
         return None
 
     def _to_grid(self, pixel): return (pixel[0] // self._shrink, pixel[1] // self._shrink)
