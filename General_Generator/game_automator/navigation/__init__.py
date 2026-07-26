@@ -110,16 +110,16 @@ class Navigator:
             self.arrived = True
             return None
 
-        # 向前看: 沿路径累积距离找到 lookahead 距离外的目标点
-        acc = 0.0
-        idx = self._wp_index
-        prev = current_pos
-        while idx < len(self._path) and acc < self.lookahead:
-            p = self._path[idx]
-            acc += np.hypot(p[0]-prev[0], p[1]-prev[1])
-            prev = p
-            idx += 1
-        target = self._path[min(idx, len(self._path)-1)]
+        # 原版 get_next_waypoint: 向前扫找第一个距当前位置 >= lookahead 的点
+        best = self._wp_index
+        for i in range(self._wp_index, len(self._path)):
+            wx, wy = self._path[i]
+            if np.hypot(wx - current_pos[0], wy - current_pos[1]) >= self.lookahead:
+                best = i
+                break
+        if best < len(self._path) - 1:
+            best = min(best + 1, len(self._path) - 1)  # look ahead a bit more
+        target = self._path[best]
 
         return compute_direction(current_pos, target)
 
