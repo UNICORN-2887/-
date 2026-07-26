@@ -53,13 +53,38 @@ def generate_source_doc():
         with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
         all_lines.append(f"// ====== {fname} ======")
+        in_docstring = False
+        in_block_comment = False
         for line in content.split('\n'):
-            stripped = line.rstrip()
-            if stripped:
-                if len(stripped) > 100:
-                    all_lines.append(stripped[:100])
+            stripped = line.strip()
+            # 空行跳过
+            if not stripped:
+                continue
+            # 文档字符串块 ("""...""")
+            if stripped.startswith('"""') or stripped.startswith("'''"):
+                if in_docstring:
+                    in_docstring = False
                 else:
-                    all_lines.append(stripped)
+                    in_docstring = True
+                continue
+            if in_docstring:
+                continue
+            # 块注释 /* ... */
+            if stripped.startswith('/*'):
+                in_block_comment = True
+                continue
+            if in_block_comment:
+                if '*/' in stripped:
+                    in_block_comment = False
+                continue
+            # 纯注释行 (Python #, JS //, HTML <!--)
+            if (stripped.startswith('#') or stripped.startswith('//') or
+                stripped.startswith('<!--')):
+                continue
+            if len(stripped) > 100:
+                all_lines.append(stripped[:100])
+            else:
+                all_lines.append(stripped)
 
     total_lines = len(all_lines)
     lines_per_page = 50
