@@ -38,5 +38,8 @@ full = ["ultralytics>=8.0", "pywin32>=306"]
 [project.scripts]
 game-automator = "game_automator.server:main"
 
+[tool.setuptools.package-data]
+"game_automator" = ["*.html", "*.json"]
+
 [tool.setuptools.packages.find]
 include = ["game_automator*"]

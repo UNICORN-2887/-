@@ -76,6 +76,53 @@ def cmd_stitch(args):
     print(f"已保存: {args.output}")
 
 
+def cmd_reachable(args):
+    """可达区标定 (交互式 cv2 窗口)."""
+    import cv2
+    from game_automator.mapping import ReachabilityEditor
+
+    editor = ReachabilityEditor()
+    editor.load_map(args.map)
+    out = args.output or f"{os.path.splitext(args.map)[0]}_reachable.png"
+
+    print("左键=涂白(可达) 右键=涂黑(不可达) P=描边 D=门标记")
+    print("1-4=画笔大小 IJKL=平移 +/-=缩放 S=保存 Q=保存+退出")
+
+    cv2.namedWindow("Reachability Editor", cv2.WINDOW_NORMAL)
+    cv2.setMouseCallback("Reachability Editor", _re_mouse_cb, editor)
+
+    while True:
+        cv2.imshow("Reachability Editor", editor.render_overlay())
+        key = cv2.waitKey(30) & 0xFF
+        if key == ord('q'):
+            editor.save(out)
+            break
+        elif key == ord('s'):
+            editor.save(out)
+        elif key in (ord('p'), ord('P')):
+            editor.cancel_poly()  # toggle poly mode state
+        elif key in (ord('d'), ord('D')):
+            pass  # door mode
+        elif ord('1') <= key <= ord('4'):
+            editor.set_brush([4, 12, 30, 80][key - ord('1')])
+        elif key == ord('c') or key == ord('C'):
+            editor.hsv_guess()
+        elif key == 13:  # Enter
+            editor.fill_poly(255)
+    cv2.destroyAllWindows()
+
+# 简化的鼠标回调
+_re_editor = None
+def _re_mouse_cb(event, x, y, flags, editor):
+    if event == cv2.EVENT_LBUTTONDOWN:
+        editor.paint(x, y, 255)
+    elif event == cv2.EVENT_RBUTTONDOWN:
+        editor.paint(x, y, 0)
+    elif event == cv2.EVENT_MOUSEMOVE and flags & cv2.EVENT_FLAG_LBUTTON:
+        editor.paint(x, y, 255)
+    elif event == cv2.EVENT_MOUSEMOVE and flags & cv2.EVENT_FLAG_RBUTTON:
+        editor.paint(x, y, 0)
+
 def cmd_calibrate(args):
     """启动 ROI 标定网页."""
     from game_automator.capture import OBSVideoCapture
@@ -110,6 +157,12 @@ def main():
     sp.add_argument("--height", type=int, default=None)
     sp.add_argument("-o", "--output", default="map_output.jpg")
     sp.set_defaults(func=cmd_stitch)
+
+    # reachable
+    sp = sub.add_parser("reachable", help="可达区标定 (交互式cv2窗口)")
+    sp.add_argument("map", nargs="?", default="map_output.jpg", help="大地图路径")
+    sp.add_argument("-o", "--output", default=None, help="输出可达图路径")
+    sp.set_defaults(func=cmd_reachable)
 
     # calibrate
     sp = sub.add_parser("calibrate", help="ROI标定")
