@@ -27,7 +27,7 @@ import numpy as np
 # 地图拼接器
 # ============================================================
 class MapStitcher:
-    def __init__(self, min_movement=25):
+    def __init__(self, min_movement=25, canvas_w=None, canvas_h=None):
         self.canvas = None
         self.canvas_x = 0
         self.canvas_y = 0
@@ -38,6 +38,8 @@ class MapStitcher:
         self.frame_count = 0
         self.min_movement = min_movement
         self.auto_mode = False
+        self.canvas_w = canvas_w  # 固定画布宽 (None=自动扩展)
+        self.canvas_h = canvas_h  # 固定画布高
 
         self.orb = cv2.ORB_create(nfeatures=1500)
         self.matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
@@ -76,9 +78,18 @@ class MapStitcher:
         h, w = color_frame.shape[:2]
 
         if self.canvas is None:
-            self.canvas = color_frame.copy()
-            self.canvas_x = 0
-            self.canvas_y = 0
+            if self.canvas_w and self.canvas_h:
+                # 固定画布: 初始帧居中
+                self.canvas = np.zeros((self.canvas_h, self.canvas_w, 3), dtype=np.uint8)
+                px = (self.canvas_w - w) // 2
+                py = (self.canvas_h - h) // 2
+                self.canvas[py:py+h, px:px+w] = color_frame
+                self.canvas_x = -px
+                self.canvas_y = -py
+            else:
+                self.canvas = color_frame.copy()
+                self.canvas_x = 0
+                self.canvas_y = 0
             self.prev_frame = gray
             self.prev_color = color_frame
             self.frame_count = 1
@@ -97,36 +108,51 @@ class MapStitcher:
         ch, cw = self.canvas.shape[:2]
         old_cx, old_cy = self.canvas_x, self.canvas_y
 
-        left = min(old_cx, new_x)
-        top = min(old_cy, new_y)
-        right = max(old_cx + cw, new_x + w)
-        bottom = max(old_cy + ch, new_y + h)
-
-        new_cw = right - left
-        new_ch = bottom - top
-        new_canvas = np.zeros((new_ch, new_cw, 3), dtype=np.uint8)
-
-        old_place_x = old_cx - left
-        old_place_y = old_cy - top
-        new_canvas[
-            old_place_y:old_place_y + ch,
-            old_place_x:old_place_x + cw
-        ] = self.canvas
+        if self.canvas_w and self.canvas_h:
+            # 固定画布: 限制边界, 不扩展
+            left = old_cx
+            top = old_cy
+        else:
+            # 自动扩展
+            left = min(old_cx, new_x)
+            top = min(old_cy, new_y)
+            right = max(old_cx + cw, new_x + w)
+            bottom = max(old_cy + ch, new_y + h)
+            new_cw = right - left
+            new_ch = bottom - top
+            new_canvas = np.zeros((new_ch, new_cw, 3), dtype=np.uint8)
+            old_place_x = old_cx - left
+            old_place_y = old_cy - top
+            new_canvas[
+                old_place_y:old_place_y + ch,
+                old_place_x:old_place_x + cw
+            ] = self.canvas
+            self.canvas = new_canvas
 
         frame_place_x = new_x - left
         frame_place_y = new_y - top
+
+        # 裁剪到画布内
+        sx1 = max(0, frame_place_x)
+        sy1 = max(0, frame_place_y)
+        sx2 = min(cw, frame_place_x + w)
+        sy2 = min(ch, frame_place_y + h)
+        if sx2 <= sx1 or sy2 <= sy1:
+            self.prev_frame = gray
+            self.prev_color = color_frame
+            return self.canvas, dx, dy, confidence
 
         frame_gray = cv2.cvtColor(color_frame, cv2.COLOR_BGR2GRAY)
         _, mask = cv2.threshold(frame_gray, 5, 255, cv2.THRESH_BINARY)
         mask_3ch = cv2.merge([mask, mask, mask])
 
-        roi = new_canvas[
-            frame_place_y:frame_place_y + h,
-            frame_place_x:frame_place_x + w
-        ]
-        np.copyto(roi, color_frame, where=(mask_3ch > 0))
+        roi = self.canvas[sy1:sy2, sx1:sx2]
+        src = color_frame[sy1-frame_place_y:sy2-frame_place_y,
+                          sx1-frame_place_x:sx2-frame_place_x]
+        src_mask = mask_3ch[sy1-frame_place_y:sy2-frame_place_y,
+                            sx1-frame_place_x:sx2-frame_place_x]
+        np.copyto(roi, src, where=(src_mask > 0))
 
-        self.canvas = new_canvas
         self.canvas_x = left
         self.canvas_y = top
         self.prev_frame = gray
@@ -247,6 +273,10 @@ def main():
     parser.add_argument("-o", "--output", type=str, default="map_output.jpg")
     parser.add_argument("--crop", type=str, default=None,
                         help="裁剪区域 x,y,w,h (如: 200,80,1080,640)")
+    parser.add_argument("--width", type=int, default=None,
+                        help="固定画布宽度 (不设则自动扩展)")
+    parser.add_argument("--height", type=int, default=None,
+                        help="固定画布高度 (不设则自动扩展)")
     args = parser.parse_args()
 
     # 打开摄像头
@@ -269,7 +299,8 @@ def main():
         crop = load_crop_config(fw, fh)
     print(f"[信息] 裁剪区: {crop}")
 
-    stitcher = MapStitcher(min_movement=args.min_move)
+    stitcher = MapStitcher(min_movement=args.min_move,
+                           canvas_w=args.width, canvas_h=args.height)
     show_crop = True  # 是否显示裁剪框
 
     print("=" * 60)
