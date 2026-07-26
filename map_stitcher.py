@@ -360,8 +360,22 @@ def main():
         key = cv2.waitKey(1) & 0xFF
         _shift = ctypes.windll.user32.GetAsyncKeyState(0x10) & 0x8000 != 0  # VK_SHIFT
 
+        # ---- 伸缩单边裁剪框 (Shift+WASD 必须最先判断, 否则被A/C/S/T吃掉) ----
+        if _shift and key in (ord('w'), ord('W')):
+            crop.y += 10; crop.h = max(100, crop.h - 10)
+            stitcher.status = f"裁剪框收缩上边: {crop}"
+        elif _shift and key in (ord('s'), ord('S')):
+            crop.h = max(100, crop.h - 10)
+            stitcher.status = f"裁剪框收缩下边: {crop}"
+        elif _shift and key in (ord('a'), ord('A')):
+            crop.x += 10; crop.w = max(100, crop.w - 10)
+            stitcher.status = f"裁剪框收缩左边: {crop}"
+        elif _shift and key in (ord('d'), ord('D')):
+            crop.w = max(100, crop.w - 10)
+            stitcher.status = f"裁剪框收缩右边: {crop}"
+
         # ---- 拼接 ----
-        if key == ord('c') or key == ord('C'):
+        elif key == ord('c') or key == ord('C'):
             cropped = crop.apply(frame)
             canvas, dx, dy, conf = stitcher.add_frame(cropped)
             if canvas is not None:
@@ -406,20 +420,6 @@ def main():
             crop.w = max(100, crop.w - 20)
             crop.h = max(100, crop.h - 20)
             stitcher.status = f"裁剪框缩小: {crop}"
-
-        # ---- 伸缩单边裁剪框 (Shift+WASD: 收缩上/下/左/右边) ----
-        elif key in (ord('w'), ord('W')) and _shift:
-            crop.y += 10; crop.h = max(100, crop.h - 10)
-            stitcher.status = f"裁剪框收缩上边: {crop}"
-        elif key in (ord('s'), ord('S')) and _shift:
-            crop.h = max(100, crop.h - 10)
-            stitcher.status = f"裁剪框收缩下边: {crop}"
-        elif key in (ord('a'), ord('A')) and _shift:
-            crop.x += 10; crop.w = max(100, crop.w - 10)
-            stitcher.status = f"裁剪框收缩左边: {crop}"
-        elif key in (ord('d'), ord('D')) and _shift:
-            crop.w = max(100, crop.w - 10)
-            stitcher.status = f"裁剪框收缩右边: {crop}"
 
         # ---- 保存 ----
         elif key == ord('s') or key == ord('S'):
