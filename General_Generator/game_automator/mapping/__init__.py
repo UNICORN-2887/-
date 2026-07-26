@@ -214,7 +214,9 @@ class PositionTracker:
         elif verbose:
             print(f"[Tracker] 跳过 (conf={conf:.2f} < 0.3)")
 
-        if conf > 0.5:
+        # 只有实际移动 > 5px 才更新参考帧, 避免静止时 conf=1.0 锁死
+        movement = abs(dx) + abs(dy)
+        if conf > 0.5 and movement > 5:
             self._ref_gray = curr_gray
 
         return (tuple(self._position), conf)
