@@ -53,10 +53,13 @@ def fetch():
                             if payload:
                                 attachments.append((fname, len(payload), payload))
 
+                key = f"{map_name}|{author}|{version}|{len(attachments)}"
+                if key in [s.get("_key") for s in submissions]:
+                    continue  # 去重: 同邮件跨多个文件夹
                 submissions.append({
                     "map": map_name, "author": author, "version": version,
                     "subject": subject, "files": [a[:2] for a in attachments],
-                    "_data": attachments
+                    "_data": attachments, "_key": key
                 })
         mail.logout()
     except Exception as e:

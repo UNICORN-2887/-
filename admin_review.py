@@ -68,10 +68,13 @@ def fetch_submissions():
                             if payload:
                                 attachments.append((fname, payload))
             for fname, data in attachments:
+                key = f"{map_name}|{username}|{version}|{fname}"
+                if key in [s.get("_key") for s in submissions]:
+                    continue
                 submissions.append({
                     "map_name": map_name, "username": username,
                     "version": version, "filename": fname,
-                    "data": data, "subject": subject
+                    "data": data, "subject": subject, "_key": key
                 })
                 print(f"      附件: {fname} ({len(data)/1024:.0f}KB)")
     mail.logout()
