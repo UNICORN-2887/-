@@ -15,20 +15,16 @@ body{font:13px sans-serif;background:#1a1a2e;color:#eee;display:flex;height:100v
 #vpWrap{border:2px solid #f90;border-radius:4px;line-height:0;position:relative}
 #vpWrap .lbl{position:absolute;top:2px;left:2px;background:rgba(0,0,0,.7);color:#f90;font-size:9px;padding:1px 4px}
 canvas#cvp{display:block;width:100%}
-#ob{min-height:180px;max-height:250px;overflow:hidden;background:#000;border:2px solid #0f0;border-radius:4px;position:relative;margin-top:2px}
-#ob .lbl2{position:absolute;top:2px;left:2px;background:rgba(0,0,0,.7);color:#0f0;font-size:9px;padding:1px 4px;z-index:1}
-#ob img{width:100%;height:100%;object-fit:contain}
-#ob .placeholder{color:#444;text-align:center;padding-top:70px;font-size:12px}
+#ob{max-height:60px;overflow:hidden}
+#ob img{width:100%;object-fit:contain}
 #steps{display:flex;gap:3px}#steps div{flex:1;padding:3px;background:#333;text-align:center;font-size:8px}
 #main{flex:1;overflow:auto;background:#0a0a0f;display:flex;flex-direction:column;min-width:200px}
 .info{color:#888;font-size:10px}
 </style></head><body>
 <div id="panel">
  <h2>Navigation Test</h2>
- <div class="info" style="color:#f90">模拟视口 (640x360):</div>
+ <div class="info" style="color:#f90">OBS viewport (640x360):</div>
  <div id="vpWrap"><div class="lbl">OBS captures this</div><canvas id="cvp" width="640" height="360"></canvas></div>
- <div class="info" style="color:#0f0;margin-top:4px">OBS 实时预览:</div>
- <div id="ob"><div class="lbl2">OBS 实时输出</div><div class="placeholder">点击 Live OBS 开始预览</div></div>
  <div class="info">Full map (L-click=start, Shift+L-click=goal):</div>
  <label>Start <input id="startXY" value="150,150"></label>
  <label>Goal <input id="goalXY" value="150,750"></label>
@@ -46,10 +42,7 @@ canvas#cvp{display:block;width:100%}
  </details>
  <button class="btn-go" onclick="doStep()">Step Forward</button>
  <button class="btn-go" id="btnSim" onclick="toggleSim()" style="background:#8b5cf6">Auto Sim</button>
- <div style="display:flex;gap:3px;align-items:center">
-  <select id="camSel" onchange="setCam(this.value)" style="flex:1;font-size:9px;padding:2px;background:#0f0f1a;border:1px solid#444;color:#eee"></select>
-  <button class="btn-vp" onclick="testOBS()" style="width:auto;padding:5px 8px;font-size:10px">Test</button>
- </div>
+ <button class="btn-vp" onclick="testOBS()">Test OBS</button>
  <button class="btn-vp" id="btnLive" onclick="toggleLive()" style="background:#e90;color:#000">Live OBS</button>
  <button class="btn-ext" onclick="toggleExt()">Ext Control</button>
  <div class="info" style="margin-top:4px">VBS speed/delay:</div>
@@ -57,8 +50,7 @@ canvas#cvp{display:block;width:100%}
   <input id="vbsSpd" value="8" style="flex:1" placeholder="speed">
   <input id="vbsDly" value="200" style="flex:1" placeholder="delay ms">
  </div>
- <button class="btn-go" onclick="genVBS()" style="background:#6366f1">Gen VBS</button>
- <button class="btn-go" onclick="genPY()" style="background:#06b6d4">Gen Python</button>
+ <button class="btn-go" onclick="genVBS()" style="background:#6366f1">Generate VBS</button>
  <button class="btn-stop" onclick="location.reload()">Reset</button>
  <textarea id="vbsOut" style="width:100%;height:250px;min-height:150px;background:#0f0f1a;border:1px solid#0f0;color:#0f0;font-size:11px;font-family:Consolas,monospace;margin-top:4px;resize:vertical;flex:1" readonly placeholder="Click Generate VBS to fill this box..."></textarea>
 <button class="btn-go" onclick="let t=document.getElementById('vbsOut');t.select();document.execCommand('copy');log('Copied!','#0f0')" style="font-size:10px;padding:3px;background:#555">Copy VBS</button>
@@ -79,16 +71,6 @@ let c=document.getElementById('c'),ctx=c.getContext('2d');
 let cvp=document.getElementById('cvp'),vctx=cvp.getContext('2d');
 
 function log(m,c){let l=document.getElementById('log');l.innerHTML='<span'+(c?' style=color:'+c:'')+'>'+m+'</span><br>'+l.innerHTML;if(l.children.length>30)l.lastChild.remove()}
-async function loadCams(){
- let r=await fetch(BASE+'/api/cameras');let j=await r.json();
- let s=document.getElementById('camSel');s.innerHTML='';
- j.cameras.forEach(c=>{s.innerHTML+='<option value='+c.id+'>'+(c.obs?'[OBS] ':'')+c.name+'</option>'})
-}
-async function setCam(id){
- await fetch(BASE+'/api/set_camera',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cam_id:parseInt(id)})});
- log('Camera set to #'+id,'#0f0')
-}
-loadCams();
 function flash(id){let e=document.getElementById(id);e.style.background='#0f0';setTimeout(()=>e.style.background='#333',400)}
 
 // Map image
@@ -96,8 +78,6 @@ if(mapB64){img=new Image();img.onload=drawAll;img.src='data:image/png;base64,'+m
 // Update input fields from restored values
 document.getElementById('startXY').value=start[0]+','+start[1];
 document.getElementById('goalXY').value=goal[0]+','+goal[1];
-if(p.get('spd'))document.getElementById('vbsSpd').value=p.get('spd');
-if(p.get('dly'))document.getElementById('vbsDly').value=p.get('dly');
 
 function drawAll(){
  let mw=img?img.width:900,mh=img?img.height:900;
@@ -114,10 +94,7 @@ function drawAll(){
  ctx.strokeStyle='#f90';ctx.lineWidth=2;ctx.setLineDash([4,4]);ctx.strokeRect((sim[0]-VW/2)*sc,(sim[1]-VH/2)*sc,VW*sc,VH*sc);ctx.setLineDash([])
  // Viewport canvas
  vctx.fillStyle='#0a0a0f';vctx.fillRect(0,0,VW,VH);
- if(img){let sx=Math.round(sim[0]-VW/2),sy=Math.round(sim[1]-VH/2),sw=VW,sh=VH,dx=0,dy=0;
-  if(sx<0){dx=-sx;sw+=sx;sx=0;}if(sy<0){dy=-sy;sh+=sy;sy=0;}
-  if(sx+sw>img.width)sw=img.width-sx;if(sy+sh>img.height)sh=img.height-sy;
-  if(sw>0&&sh>0)vctx.drawImage(img,sx,sy,sw,sh,dx,dy,sw,sh)}
+ if(img){let vx=sim[0]-VW/2,vy=sim[1]-VH/2;vctx.drawImage(img,-vx,-vy)}
  vctx.strokeStyle='#f00';vctx.lineWidth=2;
  vctx.beginPath();vctx.moveTo(VW/2-15,VH/2);vctx.lineTo(VW/2+15,VH/2);vctx.stroke();
  vctx.beginPath();vctx.moveTo(VW/2,VH/2-15);vctx.lineTo(VW/2,VH/2+15);vctx.stroke();
@@ -149,71 +126,49 @@ async function doStep(){
 
 async function testOBS(){
  let r=await fetch(BASE+'/api/capture');let j=await r.json();
- if(j.error){document.getElementById('ob').innerHTML='<div class="lbl2">OBS 实时输出</div><div style=color:#f44;font-size:12px;text-align:center;padding-top:60px>'+j.error+'</div>';log(j.error,'#f44');return}
- document.getElementById('ob').innerHTML='<div class="lbl2">OBS 实时输出</div><img src="data:image/jpeg;base64,'+j.image+'">';
+ if(j.error){log(j.error,'#f44');return}
+ document.getElementById('ob').innerHTML='<img src="data:image/jpeg;base64,'+j.image+'">';
  log('OBS: '+j.shape[0]+'x'+j.shape[1],'#0f0')
 }
 
 function toggleLive(){
  let b=document.getElementById('btnLive');
- if(liveTimer){clearInterval(liveTimer);liveTimer=null;b.textContent='Live OBS';b.style.background='#e90';document.getElementById('ob').innerHTML='<div class="lbl2">OBS 实时输出</div><div class="placeholder">点击 Live OBS 开始预览</div>';log('Live stopped','#888');return}
+ if(liveTimer){clearInterval(liveTimer);liveTimer=null;b.textContent='Live OBS';b.style.background='#e90';log('Live stopped','#888');return}
  b.textContent='Live ON';b.style.background='#0f0';log('Live started...','#0f0');
  liveTimer=setInterval(async()=>{
   try{
    let cr=await fetch(BASE+'/api/capture');let cj=await cr.json();
-   if(cj.image)document.getElementById('ob').innerHTML='<div class="lbl2">OBS 实时输出</div><img src="data:image/jpeg;base64,'+cj.image+'">';
-   else document.getElementById('ob').innerHTML='<div class="lbl2">OBS 实时输出</div><div style=color:#f44;font-size:12px;text-align:center;padding-top:60px>'+(cj.error||'no frame')+'</div>';
+   if(cj.error){document.getElementById('ob').innerHTML='<div style=color:#f44;font-size:10px>'+cj.error+'</div>';return}
+   if(!cj.image)return;
+   let tr=await fetch(BASE+'/api/track',{method:'POST'});let tj=await tr.json();
+   let dxy=tj.dxy?' dxy=('+tj.dxy[0]+','+tj.dxy[1]+')':'';
+   document.getElementById('ob').innerHTML='<img src="data:image/jpeg;base64,'+cj.image+'"><div style=font-size:9px;color:#0f0>'+cj.shape[0]+'x'+cj.shape[1]+' | '+tj.method+dxy+'</div>';
   }catch(e){}
- },Math.max(1200, parseInt(document.getElementById('vbsDly').value)||1500))
+ },1500)
 }
 
 function toggleSim(){
  let b=document.getElementById('btnSim');
- if(simTimer){clearTimeout(simTimer);simTimer=false;b.textContent='Auto Sim';b.style.background='#8b5cf6';return}
+ if(simTimer){clearInterval(simTimer);simTimer=null;b.textContent='Auto Sim';b.style.background='#8b5cf6';return}
  b.textContent='Running';b.style.background='#ef4444';
  if(!path.length){doPlan().then(()=>{if(!path.length)return;_startSim()})}else _startSim()
 }
 function _startSim(){
- if(!img||!img.complete){log('Map image not loaded! Wait...','#f44');setTimeout(_startSim,500);return;}
- // 真实流水线: 服务端渲染视口 → ORB光流追踪 → 定位 → Navigator决策
- let MOV={'MOVE_N':[0,-1],'MOVE_S':[0,1],'MOVE_W':[-1,0],'MOVE_E':[1,0],
-          'MOVE_NE':[1,-1],'MOVE_NW':[-1,-1],'MOVE_SE':[1,1],'MOVE_SW':[-1,1]};
- (function tick(){
-  if(simTimer===false)return;
-  (async()=>{
-   // 1. Tracker: 服务端从地图渲染视口 → ORB光流 → 返回绝对坐标
-   flash('stTrk');
-   let tr=await fetch(BASE+'/api/track_frame',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x:sim[0],y:sim[1]})});let tj=await tr.json();
-   // tracker置信度极高时用其坐标 (相位相关 resp>0.95 = 几乎完美匹配)
-   if(tj.pos && tj.conf>0.95){sim[0]=tj.pos[0]; sim[1]=tj.pos[1];}
-   // 2. Navigator决策
-   flash('stDec');
-   let r=await fetch(BASE+'/api/step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x:sim[0],y:sim[1]})});let j=await r.json();
-   if(j.arrived||!j.action){toggleSim();log('Arrived!','#0f0');return 'stop';}
-   // 3. 移动
-   let spd=parseInt(document.getElementById('vbsSpd').value)||8;
-   let d=MOV[j.action]||[0,0]; sim[0]+=d[0]*spd; sim[1]+=d[1]*spd;
-   // 路径校正: 偏移>30px时拉回最近路径点30%
-   if(path.length){
-    let bestD=Infinity,bi=0;
-    for(let i=0;i<path.length;i++){let dd=Math.hypot(sim[0]-path[i][0],sim[1]-path[i][1]);if(dd<bestD){bestD=dd;bi=i;}}
-    if(bestD>50){sim[0]=Math.round(sim[0]*0.7+path[bi][0]*0.3);sim[1]=Math.round(sim[1]*0.7+path[bi][1]*0.3);}
-   }
-   flash('stMov');
-   fetch(BASE+'/api/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x:sim[0],y:sim[1]})});
-   log('trk c='+tj.conf+' | '+j.action+' → ('+sim[0]+','+sim[1]+')','#0ff');
-   // 4. 重绘视口
-   drawAll();
-   // 5. OBS tracker: 等100ms让屏幕刷新+OBS拍到新帧, 再发sim坐标做ORB地图ROI定锚
-   await new Promise(r => setTimeout(r, 100));
-   try{await fetch(BASE+'/api/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x:sim[0],y:sim[1]})});}catch(e){}
-   return 'ok';
-  })().then(r=>{
-   if(r==='stop'||simTimer===false)return;
-   let dly=parseInt(document.getElementById('vbsDly').value)||200;
-   simTimer=setTimeout(tick, dly);
-  });
- })();
+ simTimer=setInterval(async()=>{
+  // 1. Capture
+  flash('stCap');let cr=await fetch(BASE+'/api/capture');let cj=await cr.json();
+  if(cj.image)document.getElementById('ob').innerHTML='<img src="data:image/jpeg;base64,'+cj.image+'">';
+  // 2. Track: OBS detects displacement → updates position
+  flash('stTrk');let tr=await fetch(BASE+'/api/track',{method:'POST'});let tj=await tr.json();
+  if(tj.dxy && (Math.abs(tj.dxy[0])>0.3 || Math.abs(tj.dxy[1])>0.3)){
+   sim[0] += tj.dxy[0]; sim[1] += tj.dxy[1];
+   log('Track: dXY=('+tj.dxy[0].toFixed(1)+','+tj.dxy[1].toFixed(1)+') pos=('+sim[0]+','+sim[1]+')','#0f0');
+  }
+  // 3. Decide: Navigator uses tracked position
+  flash('stDec');let r=await fetch(BASE+'/api/step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x:sim[0],y:sim[1]})});let j=await r.json();
+  if(j.arrived||!j.action){toggleSim();log('Arrived!','#0f0');return}
+  flash('stMov');drawAll()
+ },1000)
 }
 
 async function genVBS(){
@@ -226,28 +181,13 @@ async function genVBS(){
  ta.value=vbs;ta.style.height='300px';ta.select();
  log('VBS ready','#0f0');
 }
-async function genPY(){
- let spd=parseInt(document.getElementById('vbsSpd').value)||8;
- let dly=parseInt(document.getElementById('vbsDly').value)||200;
- let r=await fetch(BASE+'/py_template'); let tpl=await r.text();
- let py=tpl.replace(/{SX}/g,start[0]).replace(/{SY}/g,start[1]).replace(/{GX}/g,goal[0]).replace(/{GY}/g,goal[1]).replace(/{SPD}/g,spd).replace(/{DLY}/g,dly);
- let ta=document.getElementById('vbsOut');
- ta.value=py;ta.style.height='300px';ta.select();
- log('Python ready','#0f0');
-}
 
 function applyParams(){
  let wp=document.getElementById('wpReach').value;
  let gr=document.getElementById('goalReach').value;
  let la=document.getElementById('lookahead').value;
  let sh=document.getElementById('shrink').value;
- let spd=document.getElementById('vbsSpd').value;
- let dly=document.getElementById('vbsDly').value;
- let sxy=document.getElementById('startXY').value.split(',');
- let gxy=document.getElementById('goalXY').value.split(',');
- let sx=sxy[0]||start[0], sy=sxy[1]||start[1];
- let gx=gxy[0]||goal[0], gy=gxy[1]||goal[1];
- let url='/?wp='+wp+'&gr='+gr+'&la='+la+'&sh='+sh+'&spd='+spd+'&dly='+dly+'&sx='+sx+'&sy='+sy+'&gx='+gx+'&gy='+gy;
+ let url='/?wp='+wp+'&gr='+gr+'&la='+la+'&sh='+sh+'&sx='+start[0]+'&sy='+start[1]+'&gx='+goal[0]+'&gy='+goal[1];
  location.href=url;
 }
 function toggleExt(){

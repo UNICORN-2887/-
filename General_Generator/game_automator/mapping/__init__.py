@@ -5,69 +5,229 @@ import heapq, json, os
 import cv2, numpy as np
 
 
-# ── 可达图编辑器 ──────────────────────────────
+# ── 可达图编辑器 (直搬 DeadMaze reachability_map.py 完整版) ──
 class ReachabilityEditor:
-    """二值可达图编辑 (涂刷/描边/HSV/门/火堆)."""
-    def __init__(self):
-        self.img = None; self.mask = None
-        self.campfire = None; self.doors = []
-        self._brush_size = 12; self._poly_points = []
+    """二值可达图编辑器: 涂刷/描边/门标记/火堆/HSV/形态学/边界检测."""
 
+    def __init__(self):
+        self.original = None
+        self.binary = None
+        self.h = 0; self.w = 0
+        self.base = "map"
+        self.scale = 1.0
+        self.offset_x = 0; self.offset_y = 0
+        self.show_mode = 0  # 0=叠加 1=二值 2=原图
+        self.brush_size = 12
+        self.drawing = None
+        self.drag_sx = 0; self.drag_sy = 0
+        self.drag_ox = 0; self.drag_oy = 0
+        self.poly_mode = False
+        self.poly_points = []
+        self.poly_color = 255
+        self.door_mode = False
+        self.doors = []
+        self._pending_door = None
+        self._last_mouse = (0, 0)
+        self.campfire = None
+
+    # ── 加载 ──
     def load_map(self, path):
-        self.img = cv2.imread(path)
-        if self.img is None: raise FileNotFoundError(path)
-        self._init_mask()
+        self.original = cv2.imread(path)
+        if self.original is None: raise FileNotFoundError(path)
+        self.h, self.w = self.original.shape[:2]
+        self.base = os.path.splitext(os.path.basename(path))[0]
+        self.scale = min(1000 / self.w, 750 / self.h, 1.0)
+        self.binary = np.ones((self.h, self.w), dtype=np.uint8) * 255
+        print(f"[地图] {self.w}x{self.h}")
 
     def load_reachable(self, path):
-        self.mask = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-        self.img = np.zeros((*self.mask.shape, 3), dtype=np.uint8)
+        self.binary = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        if self.binary is None:
+            self.binary = np.ones((self.h, self.w), dtype=np.uint8) * 255
+        else:
+            self.h, self.w = self.binary.shape
 
-    def load_fire(self, path):
-        if os.path.exists(path):
-            with open(path) as f: self.campfire = tuple(json.load(f))
+    # ── 坐标 ──
+    def screen_to_image(self, sx, sy):
+        ix = int((sx - self.offset_x) / self.scale)
+        iy = int((sy - self.offset_y) / self.scale)
+        return max(0, min(ix, self.w - 1)), max(0, min(iy, self.h - 1))
 
-    def load_doors(self, path):
-        if os.path.exists(path):
-            with open(path) as f: self.doors = json.load(f)
+    # ── 边界检测: 黑色边缘 = 不可达 ──
+    def init_boundary(self):
+        if self.original is None: return
+        gray = cv2.cvtColor(self.original, cv2.COLOR_BGR2GRAY)
+        _, data = cv2.threshold(gray, 25, 255, cv2.THRESH_BINARY)
+        data = cv2.morphologyEx(data, cv2.MORPH_CLOSE, np.ones((8, 8), np.uint8))
+        contours, _ = cv2.findContours(data, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            largest = max(contours, key=cv2.contourArea)
+            interior = np.zeros((self.h, self.w), dtype=np.uint8)
+            cv2.drawContours(interior, [largest], -1, 255, -1)
+            interior = cv2.dilate(interior, np.ones((5, 5), np.uint8))
+            self.binary = interior
+            pct = np.sum(interior > 0) / interior.size * 100
+            print(f"[边界] 地图内可达={pct:.1f}% 黑色外围=不可达")
+        else:
+            print("[边界] 未检测到，保持全白")
 
-    def save(self, rpath, cpath=None, dpath=None):
-        cv2.imwrite(rpath, self.mask)
+    # ── HSV 分割 ──
+    def hsv_guess(self):
+        if self.original is None: return
+        hsv = cv2.cvtColor(self.original, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, np.array([0, 0, 40]), np.array([180, 255, 255]))
+        self.binary = mask
+        pct = np.sum(mask > 0) / mask.size * 100
+        print(f"[HSV] 可行走≈{pct:.1f}%")
+
+    # ── 涂刷 ──
+    def paint(self, ix, iy, color):
+        r = max(1, int(self.brush_size / self.scale))
+        x1 = max(0, ix - r); y1 = max(0, iy - r)
+        x2 = min(self.w, ix + r); y2 = min(self.h, iy + r)
+        self.binary[y1:y2, x1:x2] = color
+
+    def set_brush(self, s): self.brush_size = s
+
+    # ── 多边形 ──
+    def add_poly_point(self, x, y): self.poly_points.append((x, y))
+    def cancel_poly(self): self.poly_points.clear()
+
+    def fill_poly(self, v=255):
+        if len(self.poly_points) >= 3:
+            pts = np.array(self.poly_points, dtype=np.int32).reshape((-1, 1, 2))
+            cv2.fillPoly(self.binary, [pts], v)
+            label = "可行走" if v == 255 else "障碍"
+            print(f"[描边] 填充{len(self.poly_points)}边形 → {label}")
+        self.poly_points.clear()
+
+    # ── 门标记 ──
+    def add_door(self, ix, iy, t=1):
+        self._pending_door = (ix, iy)
+        print(f"[门] 位置({ix},{iy}) 1=左上↔右下 2=右上↔左下")
+
+    def _set_door_dir(self, dir_idx):
+        dirs = [(1, 1), (1, -1)]
+        if self._pending_door is None: return
+        if dir_idx not in [0, 1]: return
+        dx, dy = dirs[dir_idx]
+        ix, iy = self._pending_door
+        self.doors.append((ix, iy, dx, dy))
+        print(f"[门] #{len(self.doors)} ({ix},{iy})")
+        self._pending_door = None
+
+    # ── 渲染 (搬自 DeadMaze) ──
+    def render_overlay(self):
+        VW, VH = 1050, 720
+        FONT = cv2.FONT_HERSHEY_SIMPLEX
+        if self.original is None or self.binary is None:
+            return np.zeros((VH, VW, 3), dtype=np.uint8)
+
+        dw = int(self.w * self.scale); dh = int(self.h * self.scale)
+        orig_s = cv2.resize(self.original, (dw, dh))
+        bin_s = cv2.resize(self.binary, (dw, dh), interpolation=cv2.INTER_NEAREST)
+        canvas = np.zeros((VH, VW, 3), dtype=np.uint8)
+
+        ox, oy = self.offset_x, self.offset_y
+        sx1 = max(0, -ox); sy1 = max(0, -oy)
+        sx2 = min(dw, -ox + VW); sy2 = min(dh, -oy + VH)
+        dx1 = max(0, ox); dy1 = max(0, oy)
+        dx2 = min(VW, ox + dw); dy2 = min(VH, oy + dh)
+        pw = min(sx2 - sx1, dx2 - dx1); ph = min(sy2 - sy1, dy2 - dy1)
+
+        if pw > 0 and ph > 0:
+            if self.show_mode == 1:
+                src = cv2.cvtColor(bin_s, cv2.COLOR_GRAY2BGR)
+            elif self.show_mode == 2:
+                src = orig_s.copy()
+            else:
+                src = orig_s.copy()
+                m3 = bin_s[:, :, np.newaxis] / 255.0
+                g = np.zeros_like(src); g[:, :, 1] = 128
+                src = (src * 0.65 + g * 0.35 * m3).astype(np.uint8)
+                r = np.zeros_like(src); r[:, :, 2] = 180
+                src = (src * (1 - 0.45*(1-m3)) + r * 0.45*(1-m3)).astype(np.uint8)
+                e = cv2.Canny(bin_s, 50, 150)
+                src[e > 0] = [0, 255, 255]
+            canvas[dy1:dy1+ph, dx1:dx1+pw] = src[sy1:sy1+ph, sx1:sx1+pw]
+
+        # 多边形描边线
+        if self.poly_mode and len(self.poly_points) >= 1:
+            pts = [(int(p[0]*self.scale + self.offset_x),
+                    int(p[1]*self.scale + self.offset_y)) for p in self.poly_points]
+            for i in range(len(pts)):
+                cv2.circle(canvas, pts[i], 4, (0, 255, 255), -1)
+                if i > 0: cv2.line(canvas, pts[i-1], pts[i], (0, 255, 255), 2)
+
+        # 门
+        for i, (dx, dy, ddx, ddy) in enumerate(self.doors):
+            sx = int(dx * self.scale + self.offset_x)
+            sy = int(dy * self.scale + self.offset_y)
+            cv2.circle(canvas, (sx, sy), 6, (255, 0, 255), -1)
+            cv2.putText(canvas, f"D{i+1}", (sx+8, sy-8), FONT, 0.35, (255, 0, 255), 1)
+
+        walkable = np.sum(self.binary == 255) / self.binary.size * 100
+        view_names = ["叠加", "二值", "原图"]
+        color_label = "白(可达)" if self.poly_color == 255 else "黑(不可达)"
+        mode_str = "门标记" if self.door_mode else ("描边" if self.poly_mode else "涂刷")
+        info = (f"[{mode_str}] 可行走={walkable:.1f}% | 缩放={self.scale*100:.0f}% | "
+                f"画笔={self.brush_size}px | 视图: {view_names[self.show_mode]}")
+        cv2.putText(canvas, info, (5, 18), FONT, 0.38, (0, 255, 0), 1)
+        cv2.putText(canvas, "P=描边 D=门 左/右键=操作 F=切换颜色 IJKL=平移 +/-=缩放 1-4画笔 T=视图 S=保存 Q=退出",
+                    (5, VH - 6), FONT, 0.3, (180, 180, 180), 1)
+        return canvas
+
+    # ── 鼠标回调 ──
+    def on_mouse(self, event, sx, sy, flags, param):
+        ix, iy = self.screen_to_image(sx, sy)
+        self._last_mouse = (ix, iy)
+
+        if self.door_mode:
+            if event == cv2.EVENT_LBUTTONDOWN:
+                self.add_door(ix, iy)
+            return
+
+        if self.poly_mode:
+            if event == cv2.EVENT_LBUTTONDOWN:
+                self.poly_points.append((ix, iy))
+                print(f"[描边] 顶点#{len(self.poly_points)} ({ix},{iy})")
+            elif event == cv2.EVENT_RBUTTONDOWN:
+                self.fill_poly(self.poly_color)
+            return
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.drawing = 'white'; self.paint(ix, iy, 255)
+        elif event == cv2.EVENT_RBUTTONDOWN:
+            self.drawing = 'black'; self.paint(ix, iy, 0)
+        elif event == cv2.EVENT_MBUTTONDOWN:
+            self.drawing = 'pan'; self.drag_sx, self.drag_sy = sx, sy
+            self.drag_ox, self.drag_oy = self.offset_x, self.offset_y
+        elif event == cv2.EVENT_MOUSEMOVE:
+            if self.drawing == 'white': self.paint(self.screen_to_image(sx, sy)[0], self.screen_to_image(sx, sy)[1], 255)
+            elif self.drawing == 'black': self.paint(self.screen_to_image(sx, sy)[0], self.screen_to_image(sx, sy)[1], 0)
+            elif self.drawing == 'pan':
+                self.offset_x = self.drag_ox + (sx - self.drag_sx)
+                self.offset_y = self.drag_oy + (sy - self.drag_sy)
+        elif event in (cv2.EVENT_LBUTTONUP, cv2.EVENT_RBUTTONUP, cv2.EVENT_MBUTTONUP):
+            self.drawing = None
+        elif event == cv2.EVENT_MOUSEWHEEL or event == 10:
+            old = self.scale
+            self.scale = min(3.0, self.scale * 1.15) if flags > 0 else max(0.03, self.scale / 1.15)
+            if old != self.scale:
+                r = self.scale / old
+                self.offset_x = int(sx - r * (sx - self.offset_x))
+                self.offset_y = int(sy - r * (sy - self.offset_y))
+
+    # ── 保存 ──
+    def save(self, path=None, cpath=None, dpath=None):
+        if self.binary is not None:
+            cv2.imwrite(path, self.binary)
+            pct = np.sum(self.binary == 255) / self.binary.size * 100
+            print(f"[保存] {path} 可行走={pct:.1f}%")
         if cpath and self.campfire:
             with open(cpath, "w") as f: json.dump(list(self.campfire), f)
         if dpath and self.doors:
             with open(dpath, "w") as f: json.dump(self.doors, f)
-
-    def _init_mask(self):
-        h, w = self.img.shape[:2]
-        self.mask = np.full((h, w), 255, dtype=np.uint8)
-        cv2.rectangle(self.mask, (0, 0), (w-1, h-1), 0, 3)
-
-    def paint(self, x, y, v):
-        cv2.circle(self.mask, (x, y), self._brush_size, v, -1)
-
-    def set_brush(self, s): self._brush_size = s
-    def add_poly_point(self, x, y): self._poly_points.append((x, y))
-
-    def fill_poly(self, v):
-        if len(self._poly_points) >= 3:
-            pts = np.array(self._poly_points, dtype=np.int32).reshape((-1, 1, 2))
-            cv2.fillPoly(self.mask, [pts], v)
-        self._poly_points.clear()
-
-    def cancel_poly(self): self._poly_points.clear()
-    def add_door(self, x, y, t=1): self.doors.append({"x": x, "y": y, "type": t})
-
-    def hsv_guess(self):
-        if self.img is None: return
-        hsv = cv2.cvtColor(self.img, cv2.COLOR_BGR2HSV)
-        rough = cv2.inRange(hsv, np.array([0, 0, 30]), np.array([180, 180, 200]))
-        self.mask[rough > 0] = 0
-
-    def render_overlay(self):
-        if self.img is None: return self.mask
-        ov = self.img.copy()
-        ov[self.mask == 0] = (ov[self.mask == 0] * 0.4).astype(np.uint8)
-        return ov
 
 
 # ── A* 寻路 ──────────────────────────────────

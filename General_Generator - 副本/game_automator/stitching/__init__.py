@@ -39,8 +39,6 @@ class MapStitcher:
         self._prev_color = None
         self._orb = cv2.ORB_create(nfeatures=1500)
         self._matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-        self.auto_mode = False
-        self.status = "就绪 | C拼接 | A自动 | S保存 | Q退出"
 
     # ── 核心 ────────────────────────────────────
     def add_frame(self, color_frame: np.ndarray
@@ -61,8 +59,7 @@ class MapStitcher:
         self.total_dy += dy
         self._prev_gray, self._prev_color = gray, color_frame
         self.frame_count += 1
-        canvas, _, _, _ = self._paste_frame(color_frame, gray, int(self.total_dx), int(self.total_dy))
-        return canvas, dx, dy, conf
+        return self._paste_frame(color_frame, gray, int(self.total_dx), int(self.total_dy))
 
     # ── 内部 ────────────────────────────────────
     def _init_canvas(self, cf, gray, h, w):
@@ -143,57 +140,7 @@ class MapStitcher:
         self.total_dx = 0.0
         self.total_dy = 0.0
         self.frame_count = 0
-        self.auto_mode = False
 
     @property
     def size(self) -> Optional[Tuple[int, int]]:
         return self.canvas.shape[1::-1] if self.canvas is not None else None
-
-
-# ── 裁剪框: 屏蔽 HUD/侧边栏 (搬自 DeadMaze map_stitcher.py) ──
-class CropRegion:
-    """定义画面中的游戏世界区域，排除 UI."""
-
-    def __init__(self, x, y, w, h):
-        self.x = x
-        self.y = y
-        self.w = w
-        self.h = h
-
-    def apply(self, frame):
-        h, w = frame.shape[:2]
-        x = max(0, min(self.x, w - 1))
-        y = max(0, min(self.y, h - 1))
-        rw = min(self.w, w - x)
-        rh = min(self.h, h - y)
-        return frame[y:y + rh, x:x + rw].copy()
-
-    def draw_on(self, frame, color=(0, 255, 0)):
-        import cv2
-        display = frame.copy()
-        h, w = display.shape[:2]
-        x = max(0, min(self.x, w - 1))
-        y = max(0, min(self.y, h - 1))
-        rw = min(self.w, w - x)
-        rh = min(self.h, h - y)
-        cv2.rectangle(display, (x, y), (x + rw, y + rh), color, 2)
-        overlay = display.copy()
-        cv2.rectangle(overlay, (0, 0), (w, y), (0, 0, 0), -1)
-        cv2.rectangle(overlay, (0, y + rh), (w, h), (0, 0, 0), -1)
-        cv2.rectangle(overlay, (0, y), (x, y + rh), (0, 0, 0), -1)
-        cv2.rectangle(overlay, (x + rw, y), (w, y + rh), (0, 0, 0), -1)
-        display = cv2.addWeighted(display, 0.5, overlay, 0.5, 0)
-        cv2.rectangle(display, (x, y), (x + rw, y + rh), color, 2)
-        cv2.putText(display, f"ROI: ({x},{y}) {rw}x{rh}",
-                    (x + 5, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        return display
-
-    def to_dict(self):
-        return {"x": self.x, "y": self.y, "w": self.w, "h": self.h}
-
-    @staticmethod
-    def from_dict(d):
-        return CropRegion(d["x"], d["y"], d["w"], d["h"])
-
-    def __repr__(self):
-        return f"CropRegion(x={self.x}, y={self.y}, w={self.w}, h={self.h})"

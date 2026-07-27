@@ -1,6 +1,6 @@
-' Auto-generated KeySprite Script
+' Auto-generated Navigator Script (ServerTrack)
 Const BASE = "http://127.0.0.1:5001"
-Dim posX, posY, i, res
+Dim posX, posY, i, res, tk
 Dim wpX, wpY, p1, p2, dx, dy, dist
 
 Function Post(url, body)
@@ -11,12 +11,42 @@ Function Post(url, body)
     Post = http.ResponseText
 End Function
 
+Function GetConf(resText)
+    ' Extract "conf" value from JSON: "conf":0.99
+    Dim cp, ce
+    cp = InStr(resText, Chr(34) & "conf" & Chr(34) & ":")
+    If cp > 0 Then
+        cp = cp + 7 : ce = InStr(cp, resText, ",")
+        If ce = 0 Then ce = InStr(cp, resText, "}")
+        If ce > 0 Then GetConf = CDbl(Mid(resText, cp, ce - cp))
+    End If
+End Function
+
+' 1. Plan
 res = Post(BASE & "/api/plan", "{""start"":[{SX},{SY}],""goal"":[{GX},{GY}]}")
-TracePrint "Plan: " & Left(res, 80)
+TracePrint "Plan done"
 
 posX = {SX} : posY = {SY}
 For i = 1 To 300
+    ' 2. ServerTrack: phase-correlation position correction
+    tk = Post(BASE & "/api/track_frame", "{""x"":" & posX & ",""y"":" & posY & "}")
+    If GetConf(tk) > 0.5 Then
+        p1 = InStr(tk, Chr(34) & "pos" & Chr(34) & ":[")
+        If p1 > 0 Then
+            p1 = p1 + 7 : p2 = InStr(p1, tk, ",")
+            posX = CLng(Mid(tk, p1, p2 - p1))
+            p1 = p2 + 1 : p2 = InStr(p1, tk, "]")
+            If p2 > 0 Then posY = CLng(Mid(tk, p1, p2 - p1))
+        End If
+    End If
+
+    ' 3. Step: get direction from corrected position
     res = Post(BASE & "/api/step", "{""x"":" & posX & ",""y"":" & posY & "}")
+    If InStr(res, Chr(34) & "arrived" & Chr(34) & ":true") > 0 Then
+        TracePrint "Arrived! (" & posX & "," & posY & ")" : Exit For
+    End If
+
+    ' 4. Move toward waypoint
     p1 = InStr(res, Chr(34) & "waypoint" & Chr(34) & ":[")
     If p1 > 0 Then
         p1 = p1 + 12 : p2 = InStr(p1, res, ",")
@@ -32,12 +62,11 @@ For i = 1 To 300
             End If
         End If
     End If
-    If InStr(res, Chr(34) & "arrived" & Chr(34) & ":true") > 0 Then
-        TracePrint "Arrived! (" & posX & "," & posY & ")" : Exit For
-    End If
+
+    ' 5. Report
     Post BASE & "/api/report", "{""x"":" & posX & ",""y"":" & posY & "}"
     If i Mod 10 = 0 Then
-        TracePrint "Step" & i & ": (" & posX & "," & posY & ") wp=(" & wpX & "," & wpY & ")"
+        TracePrint "Step" & i & ": (" & posX & "," & posY & ")"
     End If
     Delay {DLY}
 Next

@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "game-automator"
+version = "0.1.0"
+description = "通用游戏自动化框架: 画面采集/光流建图/可达区编辑/A*寻路/导航控制"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "DeadMaze"}]
+keywords = ["game", "automation", "opencv", "pathfinding", "ocr"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Games/Entertainment",
+]
+
+dependencies = [
+    "opencv-python>=4.8",
+    "numpy>=1.24",
+    "flask>=3.0",
+    "easyocr>=1.7",
+    "pygrabber>=0.2",
+    "mss>=10.0",
+]
+
+[project.optional-dependencies]
+yolo = ["ultralytics>=8.0"]
+windows = ["pywin32>=306"]
+full = ["ultralytics>=8.0", "pywin32>=306"]
+
+[project.scripts]
+game-automator = "game_automator.server:main"
+
+[tool.setuptools.package-data]
+"game_automator" = ["*.html", "*.json"]
+
+[tool.setuptools.packages.find]
+include = ["game_automator*"]

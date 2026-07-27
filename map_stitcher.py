@@ -20,6 +20,7 @@ import time
 import argparse
 import json
 import os
+import sys
 import ctypes
 
 import cv2
@@ -282,17 +283,47 @@ def main():
                         help="固定画布高度 (不设则自动扩展)")
     args = parser.parse_args()
 
+    # ── 摄像头选择 ──
+    # 列出可用摄像头
+    cameras = []
+    try:
+        from pygrabber.dshow_graph import FilterGraph
+        for i, name in enumerate(FilterGraph().get_input_devices()):
+            cameras.append((i, name))
+    except Exception:
+        for i in range(5):
+            cap_test = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+            if cap_test.isOpened():
+                cameras.append((i, f"Camera {i}"))
+                cap_test.release()
+
+    if not cameras:
+        print("[错误] 未检测到摄像头")
+        return
+
+    print("\n可用摄像头:")
+    for idx, name in cameras:
+        marker = " [OBS]" if "obs" in name.lower() else ""
+        print(f"  {idx}: {name}{marker}")
+
+    # 自动选 OBS, 否则用第一个
+    default = next((i for i, n in cameras if "obs" in n.lower()), cameras[0][0])
+    fallback = args.camera if args.camera != 1 else default  # CLI 参数优先
+    print(f"\n默认选择: {fallback} (回车确认, 或输入编号): ", end="")
+    choice = sys.stdin.readline().strip()
+    cam_id = int(choice) if choice else fallback
+
     # 打开摄像头
-    cap = cv2.VideoCapture(args.camera)
+    cap = cv2.VideoCapture(cam_id, cv2.CAP_DSHOW)
     if not cap.isOpened():
-        print(f"[错误] 无法打开摄像头索引 {args.camera}")
+        print(f"[错误] 无法打开摄像头索引 {cam_id}")
         return
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
     fw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     fh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    print(f"[信息] 摄像头 {args.camera} 已连接 ({fw}x{fh})")
+    print(f"[信息] 摄像头 {cam_id} 已连接 ({fw}x{fh})")
 
     # 裁剪配置
     if args.crop:
