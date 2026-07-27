@@ -189,11 +189,20 @@ class NavigationServer:
         self._tracker_callback: Optional[Callable] = None
         self._map_image = map_image
         self._pf = pathfinder
+        self._reachable_path = None  # 用于动态重建
 
-        # 前端页面
+        # 前端页面 (支持URL参数调参: ?wp=25&gr=100&la=90&sh=8)
         @self._app.route("/")
         def index():
             import base64
+            wp = request.args.get("wp", 25, type=int)
+            gr = request.args.get("gr", 100, type=int)
+            la = request.args.get("la", 90, type=int)
+            sh = request.args.get("sh", 8, type=int)
+            # 用新参数重建引擎
+            if self._reachable_path:
+                self._pf = Pathfinder(self._reachable_path, shrink=sh)
+                self._nav = Navigator(self._pf, waypoint_reach=wp, goal_reach=gr, lookahead=la)
             map_b64 = ""
             if self._map_image:
                 try:
@@ -201,7 +210,8 @@ class NavigationServer:
                         map_b64 = base64.b64encode(f.read()).decode()
                 except: pass
             return render_template_string(_NAV_HTML, map_b64=map_b64,
-                gw=self._pf.grid_size[0], gh=self._pf.grid_size[1])
+                gw=self._pf.grid_size[0], gh=self._pf.grid_size[1],
+                wp=wp, gr=gr, la=la, sh=sh)
 
         @self._app.route("/api/plan", methods=["POST"])
         def plan():
@@ -276,6 +286,14 @@ canvas{cursor:crosshair;display:block}
  <label>Start <input id="startXY" value="150,150"></label>
  <label>Goal <input id="goalXY" value="750,750"></label>
  <button class="btn-plan" onclick="doPlan()">Plan Path</button>
+ <details style="margin:4px 0"><summary style="color:#888;font-size:11px;cursor:pointer">Parameters</summary>
+  <div style="font-size:10px;color:#888;margin:2px 0">Waypoint Reach <input id="wpReach" value="{{wp}}" style="width:50px"></div>
+  <div style="font-size:10px;color:#888;margin:2px 0">Goal Reach <input id="goalReach" value="{{gr}}" style="width:50px"></div>
+  <div style="font-size:10px;color:#888;margin:2px 0">Lookahead <input id="lookahead" value="{{la}}" style="width:50px"></div>
+  <div style="font-size:10px;color:#888;margin:2px 0">Shrink <input id="shrink" value="{{sh}}" style="width:50px"></div>
+  <div style="font-size:10px;color:#888;margin:2px 0">Step Speed <input id="speed" value="20" style="width:50px"></div>
+  <button class="btn-plan" onclick="location.href='/?wp='+document.getElementById('wpReach').value+'&gr='+document.getElementById('goalReach').value+'&la='+document.getElementById('lookahead').value+'&sh='+document.getElementById('shrink').value">Apply Params</button>
+ </details>
  <label>Sim Pos <input id="simPos" value="150,150"></label>
  <button class="btn-go" onclick="doStep()">Step &gt;&gt;</button>
  <button class="btn-stop" onclick="location.reload()">Reset</button>

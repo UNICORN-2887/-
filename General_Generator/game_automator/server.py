@@ -22,9 +22,9 @@ def cmd_serve(args):
     from game_automator.capture import OBSVideoCapture
 
     pf = Pathfinder(args.reachable, shrink=8)
-    cap = OBSVideoCapture(cam_id=args.camera)
     map_img = args.map if hasattr(args, 'map') and args.map else None
     server = NavigationServer(pf, port=args.port, map_image=map_img)
+    server._reachable_path = args.reachable
     print(f"地图: {args.reachable}")
     if map_img:
         import os
