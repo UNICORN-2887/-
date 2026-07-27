@@ -127,17 +127,22 @@ function toggleSim(){
  b.textContent='Running';b.style.background='#ef4444';
  if(!path.length){doPlan().then(()=>{if(!path.length)return;_startSim()})}else _startSim()
 }
+let pathIdx=0;
 function _startSim(){
+ pathIdx=0; sim[0]=path[0][0];sim[1]=path[0][1];
  simTimer=setInterval(async()=>{
   flash('stCap');let cr=await fetch(BASE+'/api/capture');let cj=await cr.json();
   if(cj.image)document.getElementById('ob').innerHTML='<img src="data:image/jpeg;base64,'+cj.image+'">';
-  flash('stTrk');let tr=await fetch(BASE+'/api/track',{method:'POST'});let tj=await tr.json();
-  if(tj.dxy&&(Math.abs(tj.dxy[0])>.5||Math.abs(tj.dxy[1])>.5)){sim[0]+=tj.dxy[0];sim[1]+=tj.dxy[1];log('dxy='+tj.dxy[0]+','+tj.dxy[1]+' '+tj.method)}
-  flash('stDec');let r=await fetch(BASE+'/api/step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x:sim[0],y:sim[1]})});let j=await r.json();
-  if(j.arrived||!j.action){toggleSim();log('Arrived!','#0f0');return}
-  flash('stMov');if(j.waypoint){let dx=j.waypoint[0]-sim[0],dy=j.waypoint[1]-sim[1],d=Math.sqrt(dx*dx+dy*dy),spd=10;if(d>0){sim[0]=Math.round(sim[0]+dx/d*spd);sim[1]=Math.round(sim[1]+dy/d*spd)}}
-  drawAll()
- },1000)
+  flash('stTrk');let tr=await fetch(BASE+'/api/track',{method:'POST'});
+  flash('stDec');
+  // 沿路径前进 (不走Navigator, 直接跟坐标)
+  if(pathIdx>=path.length-1){toggleSim();log('Arrived!','#0f0');return}
+  let tx=path[pathIdx+1][0],ty=path[pathIdx+1][1];
+  let dx=tx-sim[0],dy=ty-sim[1],d=Math.sqrt(dx*dx+dy*dy),spd=12;
+  if(d>0){sim[0]=Math.round(sim[0]+dx/d*Math.min(spd,d));sim[1]=Math.round(sim[1]+dy/d*Math.min(spd,d))}
+  if(Math.abs(sim[0]-tx)<3&&Math.abs(sim[1]-ty)<3)pathIdx++;
+  flash('stMov');drawAll()
+ },800)
 }
 
 function toggleExt(){
