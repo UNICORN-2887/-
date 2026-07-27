@@ -274,9 +274,11 @@ class NavigationServer:
 
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-            # 先用HSV找黄点大致位置
+            # HSV找红色大圆点 (0/170-180范围)
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            mask = cv2.inRange(hsv, np.array([20,80,80]), np.array([40,255,255]))
+            m1 = cv2.inRange(hsv, np.array([0,100,100]), np.array([10,255,255]))
+            m2 = cv2.inRange(hsv, np.array([170,100,100]), np.array([180,255,255]))
+            mask = cv2.bitwise_or(m1, m2)
             M = cv2.moments(mask)
             if M["m00"] > 10:
                 cx = int(M["m10"]/M["m00"]); cy = int(M["m01"]/M["m00"])
@@ -410,10 +412,11 @@ c.onclick=function(e){let p=toMap(e);if(e.shiftKey){goal=p;document.getElementBy
 
 function drawOverlay(){
  ctx.drawImage(img,0,0);
- ctx.fillStyle='#0f0';ctx.beginPath();ctx.arc(start[0],start[1],5,0,Math.PI*2);ctx.fill();
- ctx.fillStyle='#f00';ctx.beginPath();ctx.arc(goal[0],goal[1],5,0,Math.PI*2);ctx.fill();
- for(let i=1;i<path.length;i++){ctx.strokeStyle='#3b82f6';ctx.beginPath();ctx.moveTo(path[i-1][0],path[i-1][1]);ctx.lineTo(path[i][0],path[i][1]);ctx.stroke()}
- ctx.fillStyle='#ff0';ctx.beginPath();ctx.arc(sim[0],sim[1],4,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#0f0';ctx.beginPath();ctx.arc(start[0],start[1],8,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#00f';ctx.beginPath();ctx.arc(goal[0],goal[1],8,0,Math.PI*2);ctx.fill();
+ for(let i=1;i<path.length;i++){ctx.strokeStyle='#3b82f6';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(path[i-1][0],path[i-1][1]);ctx.lineTo(path[i][0],path[i][1]);ctx.stroke()}
+ ctx.fillStyle='#f00';ctx.beginPath();ctx.arc(sim[0],sim[1],12,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sim[0],sim[1],14,0,Math.PI*2);ctx.stroke();
 }
 
 async function doPlan(){
