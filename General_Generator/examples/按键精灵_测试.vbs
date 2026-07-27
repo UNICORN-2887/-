@@ -1,81 +1,50 @@
-' 按键精灵纯REST API测试 - 不依赖KeyPress, 全部走HTTP
-' 用法: python -m game_automator.server serve grid_reachable.png --map grid_map.jpg
-'       浏览器打开 http://127.0.0.1:5001 点 Ext Control 模式
-'       按键精灵运行本脚本
-
+' 按键精灵驱动浏览器导航
+' 流程: 网页设起点→Plan Path→Ext Control→运行本脚本
 Const BASE = "http://127.0.0.1:5001"
-Dim posX, posY, action, result, i
+Dim posX, posY, act, res, i
 
-Function Post(url, body)
-    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
-    http.Open "POST", url, False
-    http.SetRequestHeader "Content-Type", "application/json"
-    If body <> "" Then http.Send body Else http.Send
-    Post = http.ResponseText
-End Function
+Function Post(u,b):Set h=CreateObject("WinHttp.WinHttpRequest.5.1"):h.Open "POST",u,False:h.SetRequestHeader "Content-Type","application/json":If b<>"" Then h.Send b Else h.Send:Post=h.ResponseText:End Function
 
-Function GetVal(json, key)
-    Dim p, v, e
-    p = InStr(json, """" & key & """:")
-    If p = 0 Then GetVal = "" : Exit Function
-    p = p + Len(key) + 3
-    If Mid(json, p, 1) = """" Then
-        p = p + 1 : e = InStr(p, json, """") : GetVal = Mid(json, p, e - p)
-    Else
-        e = p
-        Do While Mid(json, e, 1) <> "," And Mid(json, e, 1) <> "}" And e < Len(json)
-            e = e + 1
-        Loop
-        GetVal = Mid(json, p, e - p)
-    End If
-End Function
+Function GetV(j,k):p=InStr(j,""""&k&""":"):If p=0 Then GetV="":Exit Function
+p=p+Len(k)+3:If Mid(j,p,1)="""" Then p=p+1:e=InStr(p,j,""""):GetV=Mid(j,p,e-p)
+Else e=p:Do While Mid(j,e,1)<>"," And Mid(j,e,1)<>"}" And e<Len(j):e=e+1:Loop:GetV=Mid(j,p,e-p):End If:End Function
 
-' 速度表: 每个动作的方向位移
-Function DX(act) : Select Case act
-    Case "MOVE_E","MOVE_NE","MOVE_SE" : DX = 6
-    Case "MOVE_W","MOVE_NW","MOVE_SW" : DX = -6
-    Case Else : DX = 0
-End Select : End Function
+Sub Report(px,py):Post BASE&"/api/report","{""x"":"&px&",""y"":"&py&"}":End Sub
 
-Function DY(act) : Select Case act
-    Case "MOVE_N","MOVE_NE","MOVE_NW" : DY = -6
-    Case "MOVE_S","MOVE_SE","MOVE_SW" : DY = 6
-    Case Else : DY = 0
-End Select : End Function
+' 读取网页设定的起点 (Ext Control 保存的)
+res = Post(BASE & "/api/position", "")
+posX = CInt(GetV(res, "posX"))
+posY = CInt(GetV(res, "posY"))
+If posX = 0 And posY = 0 Then posX = 150 : posY = 150 ' fallback
+TracePrint "Start pos: (" & posX & "," & posY & ")"
 
-' === 主程序 ===
-TracePrint "=== REST API Drived Demo ==="
+Report posX, posY
 
-' 1. 规划
-result = Post(BASE & "/api/plan", "{""start"":[150,150],""goal"":[750,750]}")
-TracePrint "Plan: " & GetVal(result, "length") & " pts"
-
-' 2. 初始化位置
-posX = 150 : posY = 150
-Post BASE & "/api/report", "{""x"":" & posX & ",""y"":" & posY & "}"
-
-' 3. 导航循环
-For i = 1 To 80
-    result = Post(BASE & "/api/step", "{""x"":" & posX & ",""y"":" & posY & "}")
-    action = GetVal(result, "action")
-
-    If GetVal(result, "arrived") = "true" Or action = "" Then
+For i = 1 To 120
+    res = Post(BASE & "/api/step", "{""x"":" & posX & ",""y"":" & posY & "}")
+    act = GetV(res, "action")
+    If GetV(res, "arrived") = "true" Or act = "" Then
         TracePrint "Arrived! (" & posX & "," & posY & ")"
         Exit For
     End If
 
-    ' 更新位置
-    posX = posX + DX(action)
-    posY = posY + DY(action)
+    ' 按方向更新位置 (步长6px)
+    Select Case act
+        Case "MOVE_N":  posY = posY - 6
+        Case "MOVE_S":  posY = posY + 6
+        Case "MOVE_W":  posX = posX - 6
+        Case "MOVE_E":  posX = posX + 6
+        Case "MOVE_NE": posX = posX + 4 : posY = posY - 4
+        Case "MOVE_NW": posX = posX - 4 : posY = posY - 4
+        Case "MOVE_SE": posX = posX + 4 : posY = posY + 4
+        Case "MOVE_SW": posX = posX - 4 : posY = posY + 4
+    End Select
 
-    ' 通知浏览器
-    Post BASE & "/api/report", "{""x"":" & posX & ",""y"":" & posY & "}"
+    Report posX, posY
 
-    If i Mod 5 = 0 Then
-        TracePrint "Step" & i & ": (" & posX & "," & posY & ") " & action
+    If i Mod 10 = 0 Then
+        TracePrint "Step" & i & ": (" & posX & "," & posY & ") " & act
     End If
-
-    Delay 400
+    Delay 300
 Next
-
-TracePrint "Done! " & i & " steps"
+TracePrint "Done!"

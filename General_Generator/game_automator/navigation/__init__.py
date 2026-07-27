@@ -258,7 +258,8 @@ class NavigationServer:
 
         @self._app.route("/api/position")
         def api_position():
-            return jsonify({"pos": self._external_pos})
+            return jsonify({"pos": self._external_pos,
+                "posX": self._external_pos[0], "posY": self._external_pos[1]})
 
         @self._app.route("/api/status")
         def status():
