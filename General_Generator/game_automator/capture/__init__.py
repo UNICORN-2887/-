@@ -66,6 +66,14 @@ class OBSVideoCapture(CaptureSource):
     def resolution(self) -> Tuple[int, int]:
         return (self._w, self._h)
 
+    def grab(self) -> bool:
+        return self._cap.grab() if self._cap else False
+
+    def retrieve(self):
+        if self._cap is None: return None, None
+        ret, frame = self._cap.retrieve()
+        return frame if ret else None
+
     def release(self) -> None:
         if self._cap:
             self._cap.release()
