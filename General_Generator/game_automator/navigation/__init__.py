@@ -282,11 +282,11 @@ class NavigationServer:
             import cv2, numpy as np
             if self._cap is None:
                 return jsonify({"error": "no capture"})
-            # Flush buffer: read 3 frames, keep last
-            for _ in range(3):
-                self._cap.grab()
-            ret, frame = self._cap.retrieve()
-            if not ret:
+            # Flush camera buffer: read and discard 2 frames, keep 3rd
+            self._cap.read()
+            self._cap.read()
+            frame = self._cap.read()
+            if frame is None:
                 return jsonify({"error": "capture failed"})
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             if not hasattr(self, '_tk'):
