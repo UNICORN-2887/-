@@ -41,6 +41,7 @@ body{font:14px sans-serif;background:#1a1a2e;color:#eee;display:flex;height:100v
  <button class="btn-go" onclick="doStep()">Step &gt;&gt;</button>
  <button class="btn-go" id="btnSim" onclick="toggleSim()" style="background:#8b5cf6">Auto Sim</button>
  <button class="btn-obs" onclick="testOBS()">Test OBS</button>
+ <button class="btn-go" id="btnExt" onclick="toggleExt()" style="background:#6366f1">Ext Control</button>
  <button class="btn-stop" onclick="location.reload()">Reset</button>
  <div id="steps">
   <div id="stCap">Capt</div><div id="stTrk">Track</div><div id="stDec">Decide</div><div id="stMov">Move</div>
@@ -71,6 +72,23 @@ function flash(id){let e=document.getElementById(id);e.style.background='#0f0';s
 function log(m){let l=document.getElementById('log');l.innerHTML=m+'<br>'+l.innerHTML;if(l.children&&l.children.length>30)l.lastChild.remove()}
 
 if(mapB64){img=new Image();img.onload=drawAll;img.src='data:image/png;base64,'+mapB64}
+
+// 轮询外部控制位置 (按键精灵等)
+let extMode=false, extPoll=null;
+function toggleExt(){
+ extMode=!extMode;
+ if(extMode){
+  extPoll=setInterval(async()=>{
+   let r=await fetch(BASE+'/api/position');let j=await r.json();
+   if(j.pos && (j.pos[0]!==sim[0]||j.pos[1]!==sim[1])){
+    sim[0]=j.pos[0];sim[1]=j.pos[1];drawAll()
+   }
+  },500);
+  log('Ext mode ON - polling /api/position')
+ }else{
+  clearInterval(extPoll);extPoll=null;log('Ext mode OFF')
+ }
+}
 
 function drawAll(){
  let mw=img?img.width:900,mh=img?img.height:900;

@@ -248,6 +248,18 @@ class NavigationServer:
             self._nav.cancel()
             return jsonify({"ok": True})
 
+        # 外部控制接口: 外部脚本(按键精灵等)推送位置
+        self._external_pos = [0, 0]
+        @self._app.route("/api/report", methods=["POST"])
+        def api_report():
+            data = request.get_json() or {}
+            self._external_pos = [data.get("x", 0), data.get("y", 0)]
+            return jsonify({"ok": True, "pos": self._external_pos})
+
+        @self._app.route("/api/position")
+        def api_position():
+            return jsonify({"pos": self._external_pos})
+
         @self._app.route("/api/status")
         def status():
             return jsonify({
