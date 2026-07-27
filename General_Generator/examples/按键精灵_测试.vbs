@@ -50,17 +50,29 @@ For i = 1 To 200
         Exit For
     End If
 
-    ' 朝waypoint移动 (不按固定方向硬走)
-    Dim wpX, wpY, dx, dy, dist
-    wpX = Int(GetV(res, "waypointX"))
-    wpY = Int(GetV(res, "waypointY"))
+    ' 朝waypoint移动 (方向保底)
+    Dim wpX, wpY, dx, dy, dist, wpStr
+    On Error Resume Next
+    wpStr = GetV(res, "waypointX")
+    If IsNumeric(wpStr) Then wpX = CLng(wpStr) Else wpX = 0
+    wpStr = GetV(res, "waypointY")
+    If IsNumeric(wpStr) Then wpY = CLng(wpStr) Else wpY = 0
+    On Error GoTo 0
     If wpX > 0 And wpY > 0 Then
         dx = wpX - posX : dy = wpY - posY
         dist = Sqr(dx*dx + dy*dy)
         If dist > 1 Then
-            posX = posX + CInt(dx / dist * 8)
-            posY = posY + CInt(dy / dist * 8)
+            posX = posX + CLng(dx / dist * 8)
+            posY = posY + CLng(dy / dist * 8)
         End If
+    Else
+        ' fallback: 方向位移
+        Select Case act
+            Case "MOVE_N":  posY = posY - 5
+            Case "MOVE_S":  posY = posY + 5
+            Case "MOVE_W":  posX = posX - 5
+            Case "MOVE_E":  posX = posX + 5
+        End Select
     End If
 
     Post BASE & "/api/report", "{""x"":" & posX & ",""y"":" & posY & "}"
