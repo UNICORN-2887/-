@@ -12,7 +12,7 @@ Function Post(url, body)
 End Function
 
 ' 1. Plan
-res = Post(BASE & "/api/plan", "{""start"":[150,150],""goal"":[150,750]}")
+res = Post(BASE & "/api/plan", "{""start"":[150,150],""goal"":[700,760]}")
 TracePrint Left(res, 80)
 
 ' 2. Step loop (server follows path coordinates)
@@ -43,8 +43,11 @@ For i = 1 To 200
         Exit For
     End If
     Post BASE & "/api/report", "{""x"":" & posX & ",""y"":" & posY & "}"
+    If i <= 3 Then
+        TracePrint "Raw[" & i & "]: " & Left(res, 100)
+    End If
     If i Mod 10 = 0 Then
-        TracePrint "Step" & i & ": (" & posX & "," & posY & ")"
+        TracePrint "Step" & i & ": (" & posX & "," & posY & ") wp=(" & wpX & "," & wpY & ")"
     End If
     Delay 200
 Next
