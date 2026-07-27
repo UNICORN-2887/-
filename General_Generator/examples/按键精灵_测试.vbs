@@ -3,11 +3,31 @@
 Const BASE = "http://127.0.0.1:5001"
 Dim posX, posY, act, res, i
 
-Function Post(u,b):Set h=CreateObject("WinHttp.WinHttpRequest.5.1"):h.Open "POST",u,False:h.SetRequestHeader "Content-Type","application/json":If b<>"" Then h.Send b Else h.Send:Post=h.ResponseText:End Function
+Function Post(url, body)
+    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+    http.Open "POST", url, False
+    http.SetRequestHeader "Content-Type", "application/json"
+    If body <> "" Then http.Send body Else http.Send
+    Post = http.ResponseText
+End Function
 
-Function GetV(j,k):p=InStr(j,""""&k&""":"):If p=0 Then GetV="":Exit Function
-p=p+Len(k)+3:If Mid(j,p,1)="""" Then p=p+1:e=InStr(p,j,""""):GetV=Mid(j,p,e-p)
-Else e=p:Do While Mid(j,e,1)<>"," And Mid(j,e,1)<>"}" And e<Len(j):e=e+1:Loop:GetV=Mid(j,p,e-p):End If:End Function
+Function GetV(json, key)
+    Dim p, e
+    p = InStr(json, """" & key & """:")
+    If p = 0 Then GetV = "" : Exit Function
+    p = p + Len(key) + 3
+    If Mid(json, p, 1) = """" Then
+        p = p + 1
+        e = InStr(p, json, """")
+        GetV = Mid(json, p, e - p)
+    Else
+        e = p
+        Do While Mid(json, e, 1) <> "," And Mid(json, e, 1) <> "}" And e < Len(json)
+            e = e + 1
+        Loop
+        GetV = Mid(json, p, e - p)
+    End If
+End Function
 
 Sub Report(px,py):Post BASE&"/api/report","{""x"":"&px&",""y"":"&py&"}":End Sub
 
