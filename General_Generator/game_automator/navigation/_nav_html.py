@@ -34,6 +34,11 @@ canvas#cvp{display:block;width:100%}
  <button class="btn-vp" onclick="testOBS()">Test OBS</button>
  <button class="btn-vp" id="btnLive" onclick="toggleLive()" style="background:#e90;color:#000">Live OBS</button>
  <button class="btn-ext" onclick="toggleExt()">Ext Control</button>
+ <div class="info" style="margin-top:4px">VBS speed/delay:</div>
+ <div style="display:flex;gap:4px">
+  <input id="vbsSpd" value="8" style="flex:1" placeholder="speed">
+  <input id="vbsDly" value="200" style="flex:1" placeholder="delay ms">
+ </div>
  <button class="btn-go" onclick="genVBS()" style="background:#6366f1">Generate VBS</button>
  <button class="btn-stop" onclick="location.reload()">Reset</button>
  <textarea id="vbsOut" style="display:none;width:100%;height:120px;background:#0f0f1a;border:1px solid#444;color:#0f0;font-size:9px;font-family:monospace;margin-top:4px" readonly></textarea>
@@ -148,7 +153,9 @@ function _startSim(){
 }
 
 async function genVBS(){
- let sx=start[0],sy=start[1],gx=goal[0],gy=goal[1],spd=8,dly=200;
+ let spd=parseInt(document.getElementById('vbsSpd').value)||8;
+ let dly=parseInt(document.getElementById('vbsDly').value)||200;
+ let sx=start[0],sy=start[1],gx=goal[0],gy=goal[1];
  let r=await fetch(BASE+'/vbs_template'); let tpl=await r.text();
  let vbs=tpl.replace(/{SX}/g,sx).replace(/{SY}/g,sy).replace(/{GX}/g,gx).replace(/{GY}/g,gy).replace(/{SPD}/g,spd).replace(/{DLY}/g,dly);
  let ta=document.getElementById('vbsOut');
