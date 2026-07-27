@@ -118,8 +118,9 @@ function drawAll(){
 
 c.onclick=function(e){
  let r=c.getBoundingClientRect();
- let scX=(img?img.width:900)/c.width, scY=(img?img.height:900)/c.height;
- let mx=Math.round((e.clientX-r.left)*scX),my=Math.round((e.clientY-r.top)*scY);
+ let iw=img?img.width:900, ih=img?img.height:900;
+ let mx=Math.round((e.clientX-r.left)/r.width*iw);
+ let my=Math.round((e.clientY-r.top)/r.height*ih);
  if(e.shiftKey){goal=[mx,my];document.getElementById('goalXY').value=mx+','+my}
  else{start=[mx,my];sim=[mx,my];document.getElementById('startXY').value=mx+','+my;document.getElementById('simPos').value=mx+','+my}
  drawAll()
