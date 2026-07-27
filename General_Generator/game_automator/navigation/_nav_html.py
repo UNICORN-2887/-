@@ -78,6 +78,8 @@ let extMode=false, extPoll=null;
 function toggleExt(){
  extMode=!extMode;
  if(extMode){
+  // 将当前sim位置设为外部控制的起点
+  fetch(BASE+'/api/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x:sim[0],y:sim[1]})});
   extPoll=setInterval(async()=>{
    let r=await fetch(BASE+'/api/position');let j=await r.json();
    if(j.pos && (j.pos[0]!==sim[0]||j.pos[1]!==sim[1])){

@@ -32,14 +32,14 @@ End Function
 
 ' 速度表: 每个动作的方向位移
 Function DX(act) : Select Case act
-    Case "MOVE_E","MOVE_NE","MOVE_SE" : DX = 12
-    Case "MOVE_W","MOVE_NW","MOVE_SW" : DX = -12
+    Case "MOVE_E","MOVE_NE","MOVE_SE" : DX = 6
+    Case "MOVE_W","MOVE_NW","MOVE_SW" : DX = -6
     Case Else : DX = 0
 End Select : End Function
 
 Function DY(act) : Select Case act
-    Case "MOVE_N","MOVE_NE","MOVE_NW" : DY = -12
-    Case "MOVE_S","MOVE_SE","MOVE_SW" : DY = 12
+    Case "MOVE_N","MOVE_NE","MOVE_NW" : DY = -6
+    Case "MOVE_S","MOVE_SE","MOVE_SW" : DY = 6
     Case Else : DY = 0
 End Select : End Function
 
