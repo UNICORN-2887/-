@@ -239,6 +239,8 @@ class NavigationServer:
                 "action": action.name if action else None,
                 "arrived": self._nav.arrived,
                 "waypoint": wp_json,
+                "waypointX": wp_json[0] if wp_json else 0,
+                "waypointY": wp_json[1] if wp_json else 0,
             })
 
         @self._app.route("/api/position", methods=["POST"])

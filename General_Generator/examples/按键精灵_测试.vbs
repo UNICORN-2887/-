@@ -50,16 +50,18 @@ For i = 1 To 200
         Exit For
     End If
 
-    Select Case act
-        Case "MOVE_N":  posY = posY - 5
-        Case "MOVE_S":  posY = posY + 5
-        Case "MOVE_W":  posX = posX - 5
-        Case "MOVE_E":  posX = posX + 5
-        Case "MOVE_NE": posX = posX + 4 : posY = posY - 4
-        Case "MOVE_NW": posX = posX - 4 : posY = posY - 4
-        Case "MOVE_SE": posX = posX + 4 : posY = posY + 4
-        Case "MOVE_SW": posX = posX - 4 : posY = posY + 4
-    End Select
+    ' 朝waypoint移动 (不按固定方向硬走)
+    Dim wpX, wpY, dx, dy, dist
+    wpX = Int(GetV(res, "waypointX"))
+    wpY = Int(GetV(res, "waypointY"))
+    If wpX > 0 And wpY > 0 Then
+        dx = wpX - posX : dy = wpY - posY
+        dist = Sqr(dx*dx + dy*dy)
+        If dist > 1 Then
+            posX = posX + CInt(dx / dist * 8)
+            posY = posY + CInt(dy / dist * 8)
+        End If
+    End If
 
     Post BASE & "/api/report", "{""x"":" & posX & ",""y"":" & posY & "}"
 
