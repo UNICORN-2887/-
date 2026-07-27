@@ -200,6 +200,13 @@ class NavigationServer:
             with open(tp, encoding="utf-8") as f:
                 return f.read()
 
+        @self._app.route("/py_template")
+        def py_template():
+            import os
+            tp = os.path.join(os.path.dirname(__file__), "py_template.txt")
+            with open(tp, encoding="utf-8") as f:
+                return f.read()
+
         @self._app.route("/")
         def index():
             import base64

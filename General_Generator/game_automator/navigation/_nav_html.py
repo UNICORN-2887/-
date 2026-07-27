@@ -50,7 +50,8 @@ canvas#cvp{display:block;width:100%}
   <input id="vbsSpd" value="8" style="flex:1" placeholder="speed">
   <input id="vbsDly" value="200" style="flex:1" placeholder="delay ms">
  </div>
- <button class="btn-go" onclick="genVBS()" style="background:#6366f1">Generate VBS</button>
+ <button class="btn-go" onclick="genVBS()" style="background:#6366f1">Gen VBS</button>
+ <button class="btn-go" onclick="genPY()" style="background:#06b6d4">Gen Python</button>
  <button class="btn-stop" onclick="location.reload()">Reset</button>
  <textarea id="vbsOut" style="width:100%;height:250px;min-height:150px;background:#0f0f1a;border:1px solid#0f0;color:#0f0;font-size:11px;font-family:Consolas,monospace;margin-top:4px;resize:vertical;flex:1" readonly placeholder="Click Generate VBS to fill this box..."></textarea>
 <button class="btn-go" onclick="let t=document.getElementById('vbsOut');t.select();document.execCommand('copy');log('Copied!','#0f0')" style="font-size:10px;padding:3px;background:#555">Copy VBS</button>
@@ -180,6 +181,15 @@ async function genVBS(){
  let ta=document.getElementById('vbsOut');
  ta.value=vbs;ta.style.height='300px';ta.select();
  log('VBS ready','#0f0');
+}
+async function genPY(){
+ let spd=parseInt(document.getElementById('vbsSpd').value)||8;
+ let dly=parseInt(document.getElementById('vbsDly').value)||200;
+ let r=await fetch(BASE+'/py_template'); let tpl=await r.text();
+ let py=tpl.replace(/{SX}/g,start[0]).replace(/{SY}/g,start[1]).replace(/{GX}/g,goal[0]).replace(/{GY}/g,goal[1]).replace(/{SPD}/g,spd).replace(/{DLY}/g,dly);
+ let ta=document.getElementById('vbsOut');
+ ta.value=py;ta.style.height='300px';ta.select();
+ log('Python ready','#0f0');
 }
 
 function applyParams(){
