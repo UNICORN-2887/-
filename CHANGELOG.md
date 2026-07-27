@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## 2026-07-27 (晚间) — 交互Demo + VBS/Python生成 + OBS闭环 + 修复
+
+### 浏览器 Demo
+- NavigationServer 内置完整前端页面 (双视图: OBS视口640x360 + 大地图全览)
+- 点击设起终点 → Plan Path(A*蓝线) → Auto Sim(自动沿路径走)
+- OBS 闭环: Capture→ORB Track→Decide→Move 四个指示灯
+- 实时 OBS 预览: Test OBS + Live OBS 连续刷新
+- 导航参数面板: Shrink/WP Reach/Goal Reach/Lookahead + Apply
+- 左侧面板 CSS resize 可拖拽宽度
+
+### VBS/Python 脚本生成
+- Gen VBS: 一键生成按键精灵脚本 (自动填入起终点)
+- Gen Python: 一键生成纯Python脚本 (标准库, 无pip依赖)
+- 模板文件服务端托管 + 占位符替换
+- Copy 按钮 + 大文本框
+- Apply 保留起终点到 URL 参数
+
+### 关键修复
+- /api/plan 绕开 Navigator 直接调 Pathfinder (解决 Apply 后路径丢失)
+- /api/step 无路径时返回 error 不返回 arrived
+- VBS 兼容修复: Dim必须在顶部/Else独立成行/去掉IsNumeric
+- Python raw string 引号冲突修复
+- ORB 追踪诊断日志
+- OBSVideoCapture 添加 grab/retrieve 方法
+
+---
+
 ## 2026-07-27 — 框架封装 + 地图审核 + 网站整合 + 问题修复
 
 ### game-automator 框架
