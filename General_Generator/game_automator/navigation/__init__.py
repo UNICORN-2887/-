@@ -340,6 +340,12 @@ canvas{cursor:crosshair;display:block}
  <button class="btn-stop" onclick="location.reload()">Reset</button>
  <button class="btn-go" onclick="testOBS()" style="background:#f59e0b;color:#000">Test OBS</button>
  <button class="btn-go" id="btnSim" onclick="toggleSim()" style="background:#8b5cf6;color:#fff">Auto Sim</button>
+ <div style="display:flex;gap:4px;margin:4px 0">
+  <div id="stCap" style="flex:1;padding:4px;background:#333;border-radius:3px;text-align:center;font-size:9px">📷<br>Capture</div>
+  <div id="stTrk" style="flex:1;padding:4px;background:#333;border-radius:3px;text-align:center;font-size:9px">🔍<br>Track</div>
+  <div id="stDec" style="flex:1;padding:4px;background:#333;border-radius:3px;text-align:center;font-size:9px">🧠<br>Decide</div>
+  <div id="stMov" style="flex:1;padding:4px;background:#333;border-radius:3px;text-align:center;font-size:9px">▶<br>Move</div>
+ </div>
  <div id="log"></div>
  <div id="obsPreview" style="margin-top:8px"></div>
 </div>
@@ -397,33 +403,54 @@ async function doStep(){
  document.getElementById('simPos').value=sim[0]+','+sim[1];
  log('Step: '+j.action+' pos=('+sim[0]+','+sim[1]+')');drawOverlay();
 }
+function flash(id){let e=document.getElementById(id);e.style.background='#0f0';setTimeout(()=>e.style.background='#333',400)}
 let simTimer=null;
 async function toggleSim(){
  let b=document.getElementById('btnSim');
  if(simTimer){clearInterval(simTimer);simTimer=null;b.textContent='Auto Sim';b.style.background='#8b5cf6';log('Sim stopped');return}
  b.textContent='Running...';b.style.background='#ef4444';
- // 先规划
  if(!path.length) await doPlan();
  if(!path.length){log('No path!');return}
- log('Auto sim started - point OBS at this window');
+ // 初始化光流追踪
+ await fetch(BASE+'/api/track',{method:'POST'});
+ log('Auto sim: OBS optical flow tracking');
+
  simTimer=setInterval(async()=>{
-  // 1. OBS capture → 2. step → 3. move dot
+  // 1. CAPTURE: 抓OBS帧
+  flash('stCap');
   let cr=await fetch(BASE+'/api/capture');let cj=await cr.json();
   if(cj.image){
    document.getElementById('obsPreview').innerHTML=
     '<img src=\"data:image/jpeg;base64,'+cj.image+'\" style=\"width:100%;border:1px solid#555\">';
   }
+
+  // 2. TRACK: 光流追踪 → 更新模拟位置
+  flash('stTrk');
+  let tr=await fetch(BASE+'/api/track',{method:'POST'});let tj=await tr.json();
+  if(tj.pos){
+   // 光流位移累积 (简化: 直接用追踪位移)
+   sim[0]+=tj.pos[0];sim[1]+=tj.pos[1];
+   sim[0]=Math.max(5,Math.min(895,sim[0])); // clamp
+   sim[1]=Math.max(5,Math.min(895,sim[1]));
+   log('Track: d=('+tj.pos[0]+','+tj.pos[1]+') conf='+tj.conf);
+  }
+
+  // 3. DECIDE: 导航步进
+  flash('stDec');
   let r=await fetch(BASE+'/api/step',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({x:sim[0],y:sim[1]})});
   let j=await r.json();
-  if(j.arrived||!j.action){toggleSim();log('Auto arrived!');return}
+  if(j.arrived||!j.action){toggleSim();log('Arrived!');return}
+
+  // 4. MOVE: 按决策移动
+  flash('stMov');
   if(j.waypoint){
    let dx=j.waypoint[0]-sim[0],dy=j.waypoint[1]-sim[1];
-   let d=Math.sqrt(dx*dx+dy*dy),spd=15;
+   let d=Math.sqrt(dx*dx+dy*dy),spd=12;
    if(d>0){sim[0]=Math.round(sim[0]+dx/d*spd);sim[1]=Math.round(sim[1]+dy/d*spd)}
   }
   document.getElementById('simPos').value=sim[0]+','+sim[1];
   drawOverlay();
- },800);
+ },1000);
 }
 </script></body></html>"""
