@@ -307,20 +307,31 @@ class NavigationServer:
             if des1 is not None and des2 is not None and len(des1)>=10 and len(des2)>=10:
                 matches = self._tk['matcher'].match(des1, des2)
                 if len(matches) >= 6:
+                    # 用最好的30个匹配算中位数
+                    best = sorted(matches, key=lambda m: m.distance)[:30]
                     dxs=[]; dys=[]
-                    for m in matches[:30]:
+                    for m in best:
                         dxs.append(kp2[m.trainIdx].pt[0]-kp1[m.queryIdx].pt[0])
                         dys.append(kp2[m.trainIdx].pt[1]-kp1[m.queryIdx].pt[1])
                     dx = np.median(dxs); dy = np.median(dys)
-                    conf = min(1.0, len(matches)/50)
-                    self._tk['pos'][0] -= int(dx)
-                    self._tk['pos'][1] -= int(dy)
-                    self._tk['prev'] = gray
-                    return jsonify({"pos": self._tk['pos'],
-                        "dxy": [round(-dx,1), round(-dy,1)],
-                        "conf": round(conf,2),
-                        "method": f"ORB {len(matches)} matches"})
-            return jsonify({"pos": self._tk['pos'], "conf":0, "method":"no match"})
+                    # 只用位移>1px的匹配
+                    good_dx = [d for d in dxs if abs(d-dx)<5]
+                    good_dy = [d for d in dys if abs(d-dy)<5]
+                    conf = max(0, min(1.0, len(good_dx)/30))
+                    # 打印诊断
+                    print(f"[Track] {len(matches)} matches, best30 dist={best[0].distance:.0f}..{best[-1].distance:.0f}, "
+                          f"dx={dx:.1f} dy={dy:.1f} inliers={len(good_dx)} conf={conf:.2f}")
+                    if abs(dx) > 0.3 or abs(dy) > 0.3:
+                        self._tk['pos'][0] -= int(dx)
+                        self._tk['pos'][1] -= int(dy)
+                        self._tk['prev'] = gray
+                        return jsonify({"pos": self._tk['pos'],
+                            "dxy": [round(-dx,1), round(-dy,1)],
+                            "conf": round(conf,2),
+                            "method": f"ORB {len(matches)} matches"})
+            # Even if no movement detected, update prev frame
+            self._tk['prev'] = gray
+            return jsonify({"pos": self._tk['pos'], "dxy": [0,0], "conf":0, "method":"no motion"})
 
         # OBS 实时预览
         @self._app.route("/api/capture")
