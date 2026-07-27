@@ -1,0 +1,16 @@
+opencv-python>=4.8
+numpy>=1.24
+flask>=3.0
+easyocr>=1.7
+pygrabber>=0.2
+mss>=10.0
+
+[full]
+ultralytics>=8.0
+pywin32>=306
+
+[windows]
+pywin32>=306
+
+[yolo]
+ultralytics>=8.0

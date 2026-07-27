@@ -21,7 +21,7 @@ def cmd_serve(args):
     from game_automator.navigation import NavigationServer
     from game_automator.capture import OBSVideoCapture
 
-    pf = Pathfinder(args.reachable)
+    pf = Pathfinder(args.reachable, shrink=8)
     cap = OBSVideoCapture(cam_id=args.camera)
     server = NavigationServer(pf, port=args.port)
     print(f"地图: {args.reachable}")
