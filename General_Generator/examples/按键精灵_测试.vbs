@@ -37,6 +37,7 @@ TracePrint "Plan: " & pathLen & " pts"
 If pathLen = 0 Then TracePrint "Plan FAILED" : WScript.Quit
 
 ' === 2. 导航 ===
+Dim wpX, wpY, dx, dy, dist, wpStr
 posX = 150 : posY = 150
 For i = 1 To 200
     res = Post(BASE & "/api/step", "{""x"":" & posX & ",""y"":" & posY & "}")
@@ -51,7 +52,6 @@ For i = 1 To 200
     End If
 
     ' 朝waypoint移动 (方向保底)
-    Dim wpX, wpY, dx, dy, dist, wpStr
     On Error Resume Next
     wpStr = GetV(res, "waypointX")
     If IsNumeric(wpStr) Then wpX = CLng(wpStr) Else wpX = 0
