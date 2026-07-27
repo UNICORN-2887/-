@@ -38,7 +38,7 @@ canvas#cvp{display:block;width:100%}
    <span style="flex:1">Goal Rch<input id="goalReach" value="{{gr}}" style="width:100%;font-size:10px;padding:2px;margin:1px 0;background:#0f0f1a;border:1px solid#444;color:#eee"></span>
    <span style="flex:1">Lookahead<input id="lookahead" value="{{la}}" style="width:100%;font-size:10px;padding:2px;margin:1px 0;background:#0f0f1a;border:1px solid#444;color:#eee"></span>
   </div>
-  <button class="btn-plan" style="font-size:10px;padding:3px;margin-top:3px" onclick="location.href='/?wp='+document.getElementById('wpReach').value+'&gr='+document.getElementById('goalReach').value+'&la='+document.getElementById('lookahead').value+'&sh='+document.getElementById('shrink').value">Apply</button>
+  <button class="btn-plan" style="font-size:10px;padding:3px;margin-top:3px" onclick="applyParams()">Apply</button>
  </details>
  <button class="btn-go" onclick="doStep()">Step Forward</button>
  <button class="btn-go" id="btnSim" onclick="toggleSim()" style="background:#8b5cf6">Auto Sim</button>
@@ -61,7 +61,11 @@ canvas#cvp{display:block;width:100%}
 <div id="main"><canvas id="c"></canvas></div>
 <script>
 const VW=640,VH=360,BASE='http://127.0.0.1:5001';
-let start=[150,150],goal=[150,750],path=[],sim=[150,150];
+// Read start/goal from URL params
+let p=new URLSearchParams(location.search);
+let start=[p.get('sx')?+p.get('sx'):150, p.get('sy')?+p.get('sy'):150];
+let goal=[p.get('gx')?+p.get('gx'):150, p.get('gy')?+p.get('gy'):750];
+let path=[],sim=[start[0],start[1]];
 let img=null,mapB64='{{map_b64}}',simTimer=null,liveTimer=null,extTimer=null;
 let c=document.getElementById('c'),ctx=c.getContext('2d');
 let cvp=document.getElementById('cvp'),vctx=cvp.getContext('2d');
@@ -71,6 +75,9 @@ function flash(id){let e=document.getElementById(id);e.style.background='#0f0';s
 
 // Map image
 if(mapB64){img=new Image();img.onload=drawAll;img.src='data:image/png;base64,'+mapB64}
+// Update input fields from restored values
+document.getElementById('startXY').value=start[0]+','+start[1];
+document.getElementById('goalXY').value=goal[0]+','+goal[1];
 
 function drawAll(){
  let mw=img?img.width:900,mh=img?img.height:900;
@@ -175,6 +182,14 @@ async function genVBS(){
  log('VBS ready','#0f0');
 }
 
+function applyParams(){
+ let wp=document.getElementById('wpReach').value;
+ let gr=document.getElementById('goalReach').value;
+ let la=document.getElementById('lookahead').value;
+ let sh=document.getElementById('shrink').value;
+ let url='/?wp='+wp+'&gr='+gr+'&la='+la+'&sh='+sh+'&sx='+start[0]+'&sy='+start[1]+'&gx='+goal[0]+'&gy='+goal[1];
+ location.href=url;
+}
 function toggleExt(){
  if(extTimer){clearInterval(extTimer);extTimer=null;log('Ext OFF','#888');return}
  log('Ext ON - polling','#0f0');
