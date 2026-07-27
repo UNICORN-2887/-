@@ -1,6 +1,7 @@
 ' 按键精灵 - 直接沿路径坐标移动
 Const BASE = "http://127.0.0.1:5001"
-Dim posX, posY, i, res, pathLen, step
+Dim posX, posY, i, res
+Dim wpX, wpY, p1, p2, dx, dy, dist
 
 Function Post(url, body)
     Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
@@ -18,8 +19,7 @@ TracePrint Left(res, 80)
 posX = 150 : posY = 150
 For i = 1 To 200
     res = Post(BASE & "/api/step", "{""x"":" & posX & ",""y"":" & posY & "}")
-    ' Extract waypoint from JSON: "waypoint":[xx,yy]
-    Dim wp, p1, p2
+    ' Extract waypoint from JSON
     p1 = InStr(res, """waypoint"":[")
     If p1 > 0 Then
         p1 = p1 + 12
@@ -30,7 +30,6 @@ For i = 1 To 200
             p2 = InStr(p1, res, "]")
             wpY = CLng(Mid(res, p1, p2 - p1))
             ' Move toward waypoint
-            Dim dx, dy, dist
             dx = wpX - posX : dy = wpY - posY
             dist = Sqr(dx*dx + dy*dy)
             If dist > 1 Then
