@@ -192,7 +192,8 @@ class NavigationServer:
             data = request.get_json() or {}
             sx, sy = data.get("start", (0, 0))
             gx, gy = data.get("goal", (0, 0))
-            path = self._nav.set_route((sx, sy), (gx, gy))
+            raw = self._nav.set_route((sx, sy), (gx, gy))
+            path = [(int(x), int(y)) for x, y in raw]
             return jsonify({"path": path, "length": len(path)})
 
         @self._app.route("/api/step", methods=["POST"])
@@ -200,10 +201,12 @@ class NavigationServer:
             data = request.get_json() or {}
             pos = (data.get("x", 0), data.get("y", 0))
             action = self._nav.step(pos)
+            wp = self._nav.current_waypoint
+            wp_json = (int(wp[0]), int(wp[1])) if wp else None
             return jsonify({
                 "action": action.name if action else None,
                 "arrived": self._nav.arrived,
-                "waypoint": self._nav.current_waypoint,
+                "waypoint": wp_json,
             })
 
         @self._app.route("/api/position", methods=["POST"])
