@@ -168,7 +168,7 @@ TracePrint "Plan: " & Left(res, 80)
 posX = ${sx} : posY = ${sy}
 For i = 1 To 300
     res = Post(BASE & "/api/step", "{""x"":" & posX & ",""y"":" & posY & "}")
-    p1 = InStr(res, """waypoint"":[")
+    p1 = InStr(res, Chr(34) & "waypoint" & Chr(34) & ":[")
     If p1 > 0 Then
         p1 = p1 + 12 : p2 = InStr(p1, res, ",")
         If p2 > 0 Then
@@ -183,7 +183,7 @@ For i = 1 To 300
             End If
         End If
     End If
-    If InStr(res, """arrived"":true") > 0 Then
+    If InStr(res, Chr(34) & "arrived" & Chr(34) & ":true") > 0 Then
         TracePrint "Arrived! (" & posX & "," & posY & ")" : Exit For
     End If
     Post BASE & "/api/report", "{""x"":" & posX & ",""y"":" & posY & "}"
