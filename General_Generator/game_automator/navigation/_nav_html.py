@@ -34,7 +34,9 @@ canvas#cvp{display:block;width:100%}
  <button class="btn-vp" onclick="testOBS()">Test OBS</button>
  <button class="btn-vp" id="btnLive" onclick="toggleLive()" style="background:#e90;color:#000">Live OBS</button>
  <button class="btn-ext" onclick="toggleExt()">Ext Control</button>
+ <button class="btn-go" onclick="genVBS()" style="background:#6366f1">Generate VBS</button>
  <button class="btn-stop" onclick="location.reload()">Reset</button>
+ <textarea id="vbsOut" style="display:none;width:100%;height:120px;background:#0f0f1a;border:1px solid#444;color:#0f0;font-size:9px;font-family:monospace;margin-top:4px" readonly></textarea>
  <div id="steps"><div id="stCap">Capt</div><div id="stTrk">Track</div><div id="stDec">Decide</div><div id="stMov">Move</div></div>
  <div id="log"></div>
  <div id="ob"></div>
@@ -143,6 +145,57 @@ function _startSim(){
   if(j.arrived||!j.action){toggleSim();log('Arrived!','#0f0');return}
   flash('stMov');drawAll()
  },1000)
+}
+
+function genVBS(){
+ let spd=8, dly=200, sx=start[0], sy=start[1], gx=goal[0], gy=goal[1];
+ let vbs=`' Auto-generated KeySprite Script
+Const BASE = "http://127.0.0.1:5001"
+Dim posX, posY, i, res
+Dim wpX, wpY, p1, p2, dx, dy, dist
+
+Function Post(url, body)
+    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+    http.Open "POST", url, False
+    http.SetRequestHeader "Content-Type", "application/json"
+    If body <> "" Then http.Send body Else http.Send
+    Post = http.ResponseText
+End Function
+
+res = Post(BASE & "/api/plan", "{""start"":[${sx},${sy}],""goal"":[${gx},${gy}]}")
+TracePrint "Plan: " & Left(res, 80)
+
+posX = ${sx} : posY = ${sy}
+For i = 1 To 300
+    res = Post(BASE & "/api/step", "{""x"":" & posX & ",""y"":" & posY & "}")
+    p1 = InStr(res, """waypoint"":[")
+    If p1 > 0 Then
+        p1 = p1 + 12 : p2 = InStr(p1, res, ",")
+        If p2 > 0 Then
+            wpX = CLng(Mid(res, p1, p2 - p1))
+            p1 = p2 + 1 : p2 = InStr(p1, res, "]")
+            wpY = CLng(Mid(res, p1, p2 - p1))
+            dx = wpX - posX : dy = wpY - posY
+            dist = Sqr(dx*dx + dy*dy)
+            If dist > 1 Then
+                posX = posX + CLng(dx / dist * ${spd})
+                posY = posY + CLng(dy / dist * ${spd})
+            End If
+        End If
+    End If
+    If InStr(res, """arrived"":true") > 0 Then
+        TracePrint "Arrived! (" & posX & "," & posY & ")" : Exit For
+    End If
+    Post BASE & "/api/report", "{""x"":" & posX & ",""y"":" & posY & "}"
+    If i Mod 10 = 0 Then
+        TracePrint "Step" & i & ": (" & posX & "," & posY & ") wp=(" & wpX & "," & wpY & ")"
+    End If
+    Delay ${dly}
+Next
+TracePrint "Done!"`;
+ let ta=document.getElementById('vbsOut');
+ ta.style.display='block'; ta.value=vbs; ta.select();
+ log('VBS generated (start='+sx+','+sy+' goal='+gx+','+gy+' speed='+spd+' delay='+dly+')','#0f0');
 }
 
 function toggleExt(){
