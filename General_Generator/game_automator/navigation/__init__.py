@@ -274,7 +274,7 @@ canvas{cursor:crosshair;display:block}
  <h2>Navigation Test</h2>
  <div class="info">Click on map to set start(click) and goal(shift+click)</div>
  <label>Start <input id="startXY" value="150,150"></label>
- <label>Goal <input id="goalXY" value="500,500"></label>
+ <label>Goal <input id="goalXY" value="750,750"></label>
  <button class="btn-plan" onclick="doPlan()">Plan Path</button>
  <label>Sim Pos <input id="simPos" value="150,150"></label>
  <button class="btn-go" onclick="doStep()">Step &gt;&gt;</button>
@@ -284,7 +284,7 @@ canvas{cursor:crosshair;display:block}
 <div id="view"><canvas id="c"></canvas></div>
 <script>
 let c=document.getElementById('c'),ctx=c.getContext('2d'),img=null;
-let start=[150,150],goal=[500,500],path=[],sim=[150,150];
+let start=[150,150],goal=[750,750],path=[],sim=[150,150];
 const BASE='http://127.0.0.1:5001';
 const gw={{gw}},gh={{gh}};
 function log(m){let l=document.getElementById('log');l.innerHTML=m+'<br>'+l.innerHTML;}
