@@ -309,52 +309,95 @@ class NavigationServer:
         # ORB帧间匹配: 整帧跟踪地图位移 (视口模式)
         @self._app.route("/api/track", methods=["POST"])
         def api_track():
+            """DeadMaze hybrid: frame-to-frame flow predict + map ROI validate"""
             import cv2, numpy as np
             if self._cap is None:
                 return jsonify({"error": "no capture"})
-            # Flush camera buffer: read and discard 2 frames, keep 3rd
-            self._cap.read()
-            self._cap.read()
-            frame = self._cap.read()
-            if frame is None:
-                return jsonify({"error": "capture failed"})
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            if not hasattr(self, '_tk'):
-                self._tk = {'prev': gray, 'orb': cv2.ORB_create(nfeatures=500),
-                    'matcher': cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True),
-                    'pos': [0,0]}
-                return jsonify({"pos":[0,0],"conf":0,"method":"ORB init"})
+            if self._map_image is None:
+                return jsonify({"error": "need --map for tracking"})
 
-            kp1, des1 = self._tk['orb'].detectAndCompute(self._tk['prev'], None)
-            kp2, des2 = self._tk['orb'].detectAndCompute(gray, None)
+            # Init
+            if not hasattr(self, '_tk'):
+                self._map_full = cv2.imread(self._map_image)
+                self._mh, self._mw = self._map_full.shape[:2]
+                self._tk = {'prev': None, 'pos': [0,0], 'orb': cv2.ORB_create(nfeatures=2000),
+                    'matcher': cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)}
+                self._cap.read(); self._cap.read()
+                frame = self._cap.read()
+                if frame is None: return jsonify({"error": "capture failed"})
+                self._tk['prev'] = cv2.resize(frame, None, fx=0.5, fy=0.5)
+                self._fw = frame.shape[1]
+                return jsonify({"pos":[0,0],"conf":0,"method":"hybrid init"})
+
+            self._cap.read(); self._cap.read()
+            frame = self._cap.read()
+            if frame is None: return jsonify({"error": "capture failed"})
+            curr = cv2.resize(frame, None, fx=0.5, fy=0.5)
+            curr_gray = cv2.cvtColor(curr, cv2.COLOR_BGR2GRAY)
+
+            # Step 1: frame-to-frame ORB displacement
+            prev_gray = cv2.cvtColor(self._tk['prev'], cv2.COLOR_BGR2GRAY)
+            kp1, des1 = self._tk['orb'].detectAndCompute(prev_gray, None)
+            kp2, des2 = self._tk['orb'].detectAndCompute(curr_gray, None)
+            dx, dy, flow_conf = 0.0, 0.0, 0.0
             if des1 is not None and des2 is not None and len(des1)>=10 and len(des2)>=10:
                 matches = self._tk['matcher'].match(des1, des2)
-                if len(matches) >= 6:
-                    # 用最好的30个匹配算中位数
-                    best = sorted(matches, key=lambda m: m.distance)[:30]
-                    dxs=[]; dys=[]
+                if len(matches) >= 8:
+                    best = sorted(matches, key=lambda m: m.distance)[:60]
+                    dxs, dys = [], []
                     for m in best:
                         dxs.append(kp2[m.trainIdx].pt[0]-kp1[m.queryIdx].pt[0])
                         dys.append(kp2[m.trainIdx].pt[1]-kp1[m.queryIdx].pt[1])
                     dx = np.median(dxs); dy = np.median(dys)
-                    # 只用位移>1px的匹配
-                    good_dx = [d for d in dxs if abs(d-dx)<5]
-                    good_dy = [d for d in dys if abs(d-dy)<5]
-                    conf = max(0, min(1.0, len(good_dx)/30))
-                    # 打印诊断
-                    print(f"[Track] {len(matches)} matches, best30 dist={best[0].distance:.0f}..{best[-1].distance:.0f}, "
-                          f"dx={dx:.1f} dy={dy:.1f} inliers={len(good_dx)} conf={conf:.2f}")
-                    if abs(dx) > 0.3 or abs(dy) > 0.3:
-                        self._tk['pos'][0] -= int(dx)
-                        self._tk['pos'][1] -= int(dy)
-                        self._tk['prev'] = gray
-                        return jsonify({"pos": self._tk['pos'],
-                            "dxy": [round(-dx,1), round(-dy,1)],
-                            "conf": round(conf,2),
-                            "method": f"ORB {len(matches)} matches"})
-            # Even if no movement detected, update prev frame
-            self._tk['prev'] = gray
-            return jsonify({"pos": self._tk['pos'], "dxy": [0,0], "conf":0, "method":"no motion"})
+                    flow_conf = sum(1 for ddx,ddy in zip(dxs,dys) if abs(ddx-dx)<6 and abs(ddy-dy)<6) / len(dxs)
+
+            # Step 2: predict position from flow
+            pred_x = self._tk['pos'][0] + dx / 0.5  # scale back to L0
+            pred_y = self._tk['pos'][1] + dy / 0.5
+
+            # Step 3: validate against map ROI
+            fh, fw = curr_gray.shape
+            q_scale = fw / self._fw
+            r = 800
+            x1 = max(0, int(pred_x - r))
+            y1 = max(0, int(pred_y - r))
+            x2 = min(self._mw, int(pred_x + r))
+            y2 = min(self._mh, int(pred_y + r))
+            map_conf = 0.0
+
+            if x2-x1>=100 and y2-y1>=100:
+                map_roi = self._map_full[y1:y2, x1:x2]
+                ms = cv2.resize(map_roi, (int((x2-x1)*q_scale), int((y2-y1)*q_scale)), interpolation=cv2.INTER_AREA)
+                kp_m, des_m = self._tk['orb'].detectAndCompute(ms, None)
+                kp_f, des_f = self._tk['orb'].detectAndCompute(curr_gray, None)
+                if des_m is not None and des_f is not None and len(des_m)>=10 and len(des_f)>=10:
+                    matches2 = self._tk['matcher'].match(des_f, des_m)
+                    if len(matches2) >= 8:
+                        best2 = sorted(matches2, key=lambda m: m.distance)[:60]
+                        mdxs, mdys = [], []
+                        for m in best2:
+                            pf = kp_f[m.queryIdx].pt
+                            pm = kp_m[m.trainIdx].pt
+                            mdxs.append(pm[0] - pf[0])
+                            mdys.append(pm[1] - pf[1])
+                        mdx = np.median(mdxs); mdy = np.median(mdys)
+                        map_conf = sum(1 for ddx,ddy in zip(mdxs,mdys) if abs(ddx-mdx)<8 and abs(ddy-mdy)<8) / len(mdxs)
+                        if map_conf > 0.30:
+                            fx = x1 + mdx / q_scale
+                            fy = y1 + mdy / q_scale
+                            self._tk['pos'] = [int(fx), int(fy)]
+                            self._tk['prev'] = curr
+                            print(f"[Track] flow({dx:.0f},{dy:.0f}) c={flow_conf:.2f} | map=({fx:.0f},{fy:.0f}) c={map_conf:.2f}")
+                            return jsonify({"pos": self._tk['pos'], "dxy": [0,0],
+                                "conf": round(map_conf,2), "method": f"hybrid map=({fx:.0f},{fy:.0f})"})
+
+            # Fallback: use flow prediction
+            if flow_conf > 0.30:
+                self._tk['pos'] = [int(pred_x), int(pred_y)]
+            self._tk['prev'] = curr
+            print(f"[Track] flow({dx:.0f},{dy:.0f}) c={flow_conf:.2f} → pred=({pred_x:.0f},{pred_y:.0f}) map_conf={map_conf:.2f}")
+            return jsonify({"pos": self._tk['pos'], "dxy": [0,0],
+                "conf": round(flow_conf,2), "method": f"flow pred=({pred_x:.0f},{pred_y:.0f})"})
 
         # OBS 实时预览
         @self._app.route("/api/capture")
