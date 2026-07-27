@@ -256,7 +256,7 @@ class NavigationServer:
                 "path_length": len(self._nav.path),
             })
 
-        # 局部LK光流: 只在黄点周围追踪
+        # ORB帧间匹配: 整帧跟踪地图位移 (视口模式)
         @self._app.route("/api/track", methods=["POST"])
         def api_track():
             import cv2, numpy as np
@@ -265,50 +265,32 @@ class NavigationServer:
             frame = self._cap.read()
             if frame is None:
                 return jsonify({"error": "capture failed"})
-            if not hasattr(self, '_tk'):
-                self._tk = {'prev_gray': None, 'prev_pts': None, 'pos': [0,0]}
-                self._tk['lk'] = dict(winSize=(21,21), maxLevel=3,
-                    criteria=(cv2.TERM_CRITERIA_EPS|cv2.TERM_CRITERIA_COUNT,30,0.001))
-                self._tk['ft'] = dict(maxCorners=100, qualityLevel=0.1,
-                    minDistance=10, blockSize=7)
-
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            if not hasattr(self, '_tk'):
+                self._tk = {'prev': gray, 'orb': cv2.ORB_create(nfeatures=500),
+                    'matcher': cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True),
+                    'pos': [0,0]}
+                return jsonify({"pos":[0,0],"conf":0,"method":"ORB init"})
 
-            # HSV找红色大圆点 (0/170-180范围)
-            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            m1 = cv2.inRange(hsv, np.array([0,100,100]), np.array([10,255,255]))
-            m2 = cv2.inRange(hsv, np.array([170,100,100]), np.array([180,255,255]))
-            mask = cv2.bitwise_or(m1, m2)
-            M = cv2.moments(mask)
-            if M["m00"] > 10:
-                cx = int(M["m10"]/M["m00"]); cy = int(M["m01"]/M["m00"])
-                # 在黄点周围 200x200 区域做光流
-                r = 100
-                x1 = max(0,cx-r); y1 = max(0,cy-r)
-                x2 = min(gray.shape[1]-1,cx+r); y2 = min(gray.shape[0]-1,cy+r)
-                roi = gray[y1:y2, x1:x2]
-                if roi.size > 0:
-                    if self._tk['prev_gray'] is None:
-                        self._tk['prev_gray'] = roi
-                        self._tk['prev_pts'] = cv2.goodFeaturesToTrack(roi, mask=None, **self._tk['ft'])
-                        self._tk['pos'] = [cx, cy]
-                        return jsonify({"pos": [cx,cy], "conf":0.5, "method":"LK init"})
-                    # LK光流追踪
-                    next_pts, status, _ = cv2.calcOpticalFlowPyrLK(
-                        self._tk['prev_gray'], roi, self._tk['prev_pts'], None, **self._tk['lk'])
-                    if next_pts is not None and len(next_pts) >= 4:
-                        good_new = next_pts[status==1]; good_old = self._tk['prev_pts'][status==1]
-                        if len(good_new) >= 4:
-                            dx = np.median(good_new[:,0]-good_old[:,0])
-                            dy = np.median(good_new[:,1]-good_old[:,1])
-                            self._tk['pos'][0] -= int(dx)
-                            self._tk['pos'][1] -= int(dy)
-                            self._tk['prev_gray'] = roi
-                            self._tk['prev_pts'] = good_new.reshape(-1,1,2) if len(good_new)>=50 else cv2.goodFeaturesToTrack(roi, mask=None, **self._tk['ft'])
-                            return jsonify({"pos": self._tk['pos'], "conf": len(good_new)/max(len(self._tk['prev_pts']),1),
-                                "method": f"LK flow dx={dx:.1f} dy={dy:.1f}"})
-            # fallback
-            return jsonify({"pos": self._tk['pos'] if self._tk['pos'] else [0,0], "conf":0.0, "method":"no motion"})
+            kp1, des1 = self._tk['orb'].detectAndCompute(self._tk['prev'], None)
+            kp2, des2 = self._tk['orb'].detectAndCompute(gray, None)
+            if des1 is not None and des2 is not None and len(des1)>=10 and len(des2)>=10:
+                matches = self._tk['matcher'].match(des1, des2)
+                if len(matches) >= 6:
+                    dxs=[]; dys=[]
+                    for m in matches[:30]:
+                        dxs.append(kp2[m.trainIdx].pt[0]-kp1[m.queryIdx].pt[0])
+                        dys.append(kp2[m.trainIdx].pt[1]-kp1[m.queryIdx].pt[1])
+                    dx = np.median(dxs); dy = np.median(dys)
+                    conf = min(1.0, len(matches)/50)
+                    self._tk['pos'][0] -= int(dx)
+                    self._tk['pos'][1] -= int(dy)
+                    self._tk['prev'] = gray
+                    return jsonify({"pos": self._tk['pos'],
+                        "dxy": [round(-dx,1), round(-dy,1)],
+                        "conf": round(conf,2),
+                        "method": f"ORB {len(matches)} matches"})
+            return jsonify({"pos": self._tk['pos'], "conf":0, "method":"no match"})
 
         # OBS 实时预览
         @self._app.route("/api/capture")
@@ -466,14 +448,14 @@ async function toggleSim(){
     '<img src=\"data:image/jpeg;base64,'+cj.image+'\" style=\"width:100%;border:1px solid#555\">';
   }
 
-  // 2. TRACK: 在OBS帧中搜索黄点 → 作为真实位置
+  // 2. TRACK: ORB帧间匹配 → 地图位移
   flash('stTrk');
   let tr=await fetch(BASE+'/api/track',{method:'POST'});let tj=await tr.json();
-  if(tj.pos && tj.conf > 0){
-   sim[0]=tj.pos[0]; sim[1]=tj.pos[1]; // OBS观测位置直接替换!
-   log('Track: found at ('+tj.pos[0]+','+tj.pos[1]+') '+tj.method);
-  } else {
-   log('Track: yellow dot not found in OBS frame');
+  if(tj.dxy && (Math.abs(tj.dxy[0])>0.5 || Math.abs(tj.dxy[1])>0.5)){
+   sim[0] += tj.dxy[0]; sim[1] += tj.dxy[1]; // OBS观测到的地图滚动位移
+   log('Track: dxy=('+tj.dxy[0]+','+tj.dxy[1]+') conf='+tj.conf+' '+tj.method);
+  } else if(tj.dxy){
+   log('Track: still conf='+tj.conf+' '+tj.method);
   }
 
   // 3. DECIDE: 导航步进
