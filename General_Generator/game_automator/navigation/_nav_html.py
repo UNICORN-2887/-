@@ -41,6 +41,7 @@ body{font:14px sans-serif;background:#1a1a2e;color:#eee;display:flex;height:100v
  <button class="btn-go" onclick="doStep()">Step &gt;&gt;</button>
  <button class="btn-go" id="btnSim" onclick="toggleSim()" style="background:#8b5cf6">Auto Sim</button>
  <button class="btn-obs" onclick="testOBS()">Test OBS</button>
+ <button class="btn-obs" id="btnLive" onclick="toggleLiveView()" style="background:#e90;color:#000">Live OBS</button>
  <button class="btn-go" id="btnExt" onclick="toggleExt()" style="background:#6366f1">Ext Control</button>
  <button class="btn-stop" onclick="location.reload()">Reset</button>
  <div id="steps">
@@ -140,7 +141,24 @@ async function doStep(){
  document.getElementById('simPos').value=sim[0]+','+sim[1];log('Step: '+j.action);drawAll()
 }
 
-async function testOBS(){
+async let liveTimer=null;
+function toggleLiveView(){
+ let b=document.getElementById('btnLive');
+ if(liveTimer){clearInterval(liveTimer);liveTimer=null;b.textContent='Live OBS';b.style.background='#e90';return}
+ b.textContent='Live ON';b.style.background='#0f0';
+ liveTimer=setInterval(async()=>{
+  let cr=await fetch(BASE+'/api/capture');let cj=await cr.json();
+  if(cj.image){
+   let tr=await fetch(BASE+'/api/track',{method:'POST'});let tj=await tr.json();
+   let dxy=tj.dxy?('dXY=('+tj.dxy[0]+','+tj.dxy[1]+')'):'';
+   document.getElementById('obsPreview').innerHTML=
+    '<img src="data:image/jpeg;base64,'+cj.image+'" style="width:100%;border:1px solid#555">'+
+    '<div style="font-size:9px;color:#0f0">'+cj.shape[0]+'x'+cj.shape[1]+' | '+tj.method+' '+dxy+' | conf='+tj.conf+'</div>';
+  }
+ },1500)
+}
+
+function testOBS(){
  let r=await fetch(BASE+'/api/capture');let j=await r.json();
  if(j.error){log('OBS ERROR: '+j.error);return}
  document.getElementById('obsPreview').innerHTML='<img src="data:image/jpeg;base64,'+j.image+'" style="width:100%;border:1px solid#555;margin-top:4px">';
