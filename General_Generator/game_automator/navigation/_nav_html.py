@@ -12,7 +12,8 @@ body{font:14px sans-serif;background:#1a1a2e;color:#eee;display:flex;height:100v
 #panel button{width:100%;padding:6px;border:none;border-radius:3px;cursor:pointer;font-size:12px}
 .btn-plan{background:#3b82f6;color:#fff}.btn-go{background:#10b981;color:#fff}
 .btn-stop{background:#ef4444;color:#fff}.btn-obs{background:#f59e0b;color:#000}
-#log{background:#0f0f1a;color:#aaa;font-size:10px;padding:6px;border-radius:3px;max-height:100px;overflow-y:auto;font-family:monospace;line-height:1.4}
+#log{background:#0f0f1a;color:#aaa;font-size:10px;padding:6px;border-radius:3px;min-height:60px;max-height:150px;overflow-y:auto;font-family:monospace;line-height:1.4;flex-shrink:0}
+#obsPreview img{max-height:80px!important;object-fit:contain}
 #steps{display:flex;gap:3px}
 #steps div{flex:1;padding:3px;background:#333;border-radius:2px;text-align:center;font-size:8px}
 #main{flex:1;overflow:auto;background:#0a0a0f;display:flex;flex-direction:column}
