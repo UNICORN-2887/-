@@ -37,8 +37,8 @@ Sub Report(px,py):Post BASE&"/api/report","{""x"":"&px&",""y"":"&py&"}":End Sub
 
 ' 读取网页设定的起点 (Ext Control 保存的)
 res = Post(BASE & "/api/position", "")
-posX = CInt(GetV(res, "posX"))
-posY = CInt(GetV(res, "posY"))
+posX = CLng(Trim(GetV(res, "posX")))
+posY = CLng(Trim(GetV(res, "posY")))
 If posX = 0 And posY = 0 Then posX = 150 : posY = 150 ' fallback
 TracePrint "Start pos: (" & posX & "," & posY & ")"
 
