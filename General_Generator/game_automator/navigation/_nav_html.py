@@ -24,7 +24,7 @@ body{font:14px sans-serif;background:#1a1a2e;color:#eee;display:flex;height:100v
  <h2>Navigation Test</h2>
  <div class="info" style="color:#f90">OBS viewport:</div>
  <div style="border:2px solid #f90;border-radius:4px;line-height:0">
-  <canvas id="cvp" width="400" height="300"></canvas>
+  <canvas id="cvp" width="640" height="360"></canvas>
  </div>
  <div class="info">Full map (click: L=start, Shift+L=goal):</div>
  <label>Start <input id="startXY" value="150,150"></label>
@@ -55,7 +55,7 @@ body{font:14px sans-serif;background:#1a1a2e;color:#eee;display:flex;height:100v
 </div>
 
 <script>
-const VW=400, VH=300, BASE='http://127.0.0.1:5001';
+const VW=640, VH=360, BASE='http://127.0.0.1:5001';
 let start=[150,150], goal=[750,750], path=[], sim=[150,150];
 let c=document.getElementById('c'), ctx=c.getContext('2d');
 let cvp=document.getElementById('cvp'), vctx=cvp.getContext('2d');
