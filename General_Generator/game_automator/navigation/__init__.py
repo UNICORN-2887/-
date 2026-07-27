@@ -180,12 +180,28 @@ class NavigationServer:
 
     def __init__(self, pathfinder: Pathfinder,
                  driver: Optional[AbstractDriver] = None,
-                 port: int = 5001):
-        from flask import Flask, request, jsonify
+                 port: int = 5001,
+                 map_image: Optional[str] = None):
+        from flask import Flask, request, jsonify, render_template_string
         self._nav = Navigator(pathfinder, driver)
         self._port = port
         self._app = Flask(__name__)
         self._tracker_callback: Optional[Callable] = None
+        self._map_image = map_image
+        self._pf = pathfinder
+
+        # 前端页面
+        @self._app.route("/")
+        def index():
+            import base64
+            map_b64 = ""
+            if self._map_image:
+                try:
+                    with open(self._map_image, "rb") as f:
+                        map_b64 = base64.b64encode(f.read()).decode()
+                except: pass
+            return render_template_string(_NAV_HTML, map_b64=map_b64,
+                gw=self._pf.grid_size[0], gh=self._pf.grid_size[1])
 
         @self._app.route("/api/plan", methods=["POST"])
         def plan():
@@ -230,7 +246,7 @@ class NavigationServer:
             })
 
     def start(self, blocking: bool = True):
-        print(f"[NavigationServer] http://127.0.0.1:{self._port}")
+        print(f"[NavigationServer] http://127.0.0.1:{self._port}/  (前端)")
         self._app.run(host="127.0.0.1", port=self._port,
                        debug=False, use_reloader=False)
 
@@ -238,3 +254,75 @@ class NavigationServer:
         t = Thread(target=self.start, kwargs={"blocking": True}, daemon=True)
         t.start()
         return t
+
+_NAV_HTML = r"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Navigation Test</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font:14px sans-serif;background:#1a1a2e;color:#eee;display:flex;height:100vh}
+#panel{width:280px;background:#1e1e2e;border-right:1px solid#333;padding:14px;display:flex;flex-direction:column;gap:10px}
+#panel h2{color:#0ff;font-size:16px}
+#panel .info{color:#888;font-size:11px}
+#panel input{width:100%;padding:6px;background:#0f0f1a;border:1px solid#444;color:#eee;font-size:12px}
+#panel button{width:100%;padding:8px;border:none;border-radius:4px;cursor:pointer;font-size:13px}
+.btn-plan{background:#3b82f6;color:#fff}.btn-go{background:#10b981;color:#fff}.btn-stop{background:#ef4444;color:#fff}
+#view{flex:1;overflow:auto;background:#0a0a0f;position:relative}
+canvas{cursor:crosshair;display:block}
+#log{background:#0f0f1a;color:#aaa;font-size:11px;padding:8px;border-radius:4px;max-height:120px;overflow-y:auto;font-family:monospace}
+</style></head><body>
+<div id="panel">
+ <h2>Navigation Test</h2>
+ <div class="info">Click on map to set start(click) and goal(shift+click)</div>
+ <label>Start <input id="startXY" value="150,150"></label>
+ <label>Goal <input id="goalXY" value="500,500"></label>
+ <button class="btn-plan" onclick="doPlan()">Plan Path</button>
+ <label>Sim Pos <input id="simPos" value="150,150"></label>
+ <button class="btn-go" onclick="doStep()">Step &gt;&gt;</button>
+ <button class="btn-stop" onclick="location.reload()">Reset</button>
+ <div id="log"></div>
+</div>
+<div id="view"><canvas id="c"></canvas></div>
+<script>
+let c=document.getElementById('c'),ctx=c.getContext('2d'),img=null;
+let start=[150,150],goal=[500,500],path=[],sim=[150,150];
+const BASE='http://127.0.0.1:5001';
+const gw={{gw}},gh={{gh}};
+function log(m){let l=document.getElementById('log');l.innerHTML=m+'<br>'+l.innerHTML;}
+
+// Load map or draw blank
+let mapB64='{{map_b64}}';
+if(mapB64){
+ img=new Image();
+ img.onload=function(){c.width=img.width;c.height=img.height;ctx.drawImage(img,0,0);drawOverlay()};
+ img.src='data:image/png;base64,'+mapB64;
+}else{
+ c.width=900;c.height=900;ctx.fillStyle='#1a2a1a';ctx.fillRect(0,0,900,900);
+ ctx.strokeStyle='#333';ctx.strokeRect(1,1,898,898);
+ drawOverlay();
+}
+
+function toMap(e){let r=c.getBoundingClientRect();return[Math.round((e.clientX-r.left)*(img.naturalWidth/c.width)),Math.round((e.clientY-r.top)*(img.naturalHeight/c.height))]}
+c.onclick=function(e){let p=toMap(e);if(e.shiftKey){goal=p;document.getElementById('goalXY').value=p[0]+','+p[1]}else{start=p;sim=p.slice();document.getElementById('startXY').value=p[0]+','+p[1];document.getElementById('simPos').value=p[0]+','+p[1]} drawOverlay()}
+
+function drawOverlay(){
+ ctx.drawImage(img,0,0);
+ ctx.fillStyle='#0f0';ctx.beginPath();ctx.arc(start[0],start[1],5,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#f00';ctx.beginPath();ctx.arc(goal[0],goal[1],5,0,Math.PI*2);ctx.fill();
+ for(let i=1;i<path.length;i++){ctx.strokeStyle='#3b82f6';ctx.beginPath();ctx.moveTo(path[i-1][0],path[i-1][1]);ctx.lineTo(path[i][0],path[i][1]);ctx.stroke()}
+ ctx.fillStyle='#ff0';ctx.beginPath();ctx.arc(sim[0],sim[1],4,0,Math.PI*2);ctx.fill();
+}
+
+async function doPlan(){
+ let r=await fetch(BASE+'/api/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start:start,goal:goal})});
+ let j=await r.json(); path=j.path; log('Path: '+j.length+' points'); drawOverlay();
+}
+
+async function doStep(){
+ let r=await fetch(BASE+'/api/step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x:sim[0],y:sim[1]})});
+ let j=await r.json();
+ if(j.arrived||!j.action){log('Arrived!');return}
+ if(j.waypoint){let dx=j.waypoint[0]-sim[0],dy=j.waypoint[1]-sim[1];let d=Math.sqrt(dx*dx+dy*dy);let spd=20;if(d>0){sim[0]=Math.round(sim[0]+dx/d*spd);sim[1]=Math.round(sim[1]+dy/d*spd)}}
+ document.getElementById('simPos').value=sim[0]+','+sim[1];
+ log('Step: '+j.action+' pos=('+sim[0]+','+sim[1]+')');drawOverlay();
+}
+</script></body></html>"""

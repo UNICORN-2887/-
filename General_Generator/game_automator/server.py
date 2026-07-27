@@ -23,7 +23,8 @@ def cmd_serve(args):
 
     pf = Pathfinder(args.reachable, shrink=8)
     cap = OBSVideoCapture(cam_id=args.camera)
-    server = NavigationServer(pf, port=args.port)
+    map_img = args.map if hasattr(args, 'map') and args.map else None
+    server = NavigationServer(pf, port=args.port, map_image=map_img)
     print(f"地图: {args.reachable}")
     print(f"摄像头: OBS #{args.camera}")
     server.start()
@@ -147,6 +148,7 @@ def main():
     sp.add_argument("reachable", help="可达图路径")
     sp.add_argument("-c", "--camera", type=int, default=1)
     sp.add_argument("-p", "--port", type=int, default=5001)
+    sp.add_argument("--map", type=str, default=None, help="地图图片(前端显示用)")
     sp.set_defaults(func=cmd_serve)
 
     # stitch
