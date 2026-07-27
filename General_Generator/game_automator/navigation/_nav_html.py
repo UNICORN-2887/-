@@ -5,7 +5,7 @@ _NAV_HTML = r"""<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font:13px sans-serif;background:#1a1a2e;color:#eee;display:flex;height:100vh;overflow:hidden}
-#panel{width:300px;min-width:180px;max-width:600px;resize:horizontal;overflow:auto;background:#1e1e2e;padding:10px;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+#panel{width:320px;min-width:250px;max-width:650px;resize:horizontal;overflow:auto;background:#1e1e2e;padding:8px;display:flex;flex-direction:column;gap:4px;flex-shrink:0}
 #panel h2{color:#0ff;font-size:15px}
 #panel input,button{width:100%;padding:5px;background:#0f0f1a;border:1px solid#444;color:#eee;font-size:11px;border-radius:3px}
 #panel button{cursor:pointer;margin:2px 0}
@@ -29,12 +29,16 @@ canvas#cvp{display:block;width:100%}
  <label>Start <input id="startXY" value="150,150"></label>
  <label>Goal <input id="goalXY" value="150,750"></label>
  <button class="btn-plan" onclick="doPlan()">Plan Path</button>
- <details open style="margin:2px 0"><summary style="color:#0ff;font-size:12px;cursor:pointer">Navigation Params</summary>
-  <div style="font-size:10px;color:#aaa;margin:2px 0">Shrink <input id="shrink" value="{{sh}}" style="width:50px;float:right"></div>
-  <div style="font-size:10px;color:#aaa;margin:2px 0">WP Reach <input id="wpReach" value="{{wp}}" style="width:50px;float:right"></div>
-  <div style="font-size:10px;color:#aaa;margin:2px 0">Goal Reach <input id="goalReach" value="{{gr}}" style="width:50px;float:right"></div>
-  <div style="font-size:10px;color:#aaa;margin:2px 0">Lookahead <input id="lookahead" value="{{la}}" style="width:50px;float:right"></div>
-  <button class="btn-plan" style="margin-top:4px" onclick="location.href='/?wp='+document.getElementById('wpReach').value+'&gr='+document.getElementById('goalReach').value+'&la='+document.getElementById('lookahead').value+'&sh='+document.getElementById('shrink').value">Apply Nav Params</button>
+ <details open style="margin:2px 0"><summary style="color:#0ff;font-size:11px;cursor:pointer">Nav Params</summary>
+  <div style="display:flex;gap:3px;flex-wrap:wrap;font-size:10px">
+   <span style="flex:1">Shrink<input id="shrink" value="{{sh}}" style="width:100%;font-size:10px;padding:2px;margin:1px 0;background:#0f0f1a;border:1px solid#444;color:#eee"></span>
+   <span style="flex:1">WP Reach<input id="wpReach" value="{{wp}}" style="width:100%;font-size:10px;padding:2px;margin:1px 0;background:#0f0f1a;border:1px solid#444;color:#eee"></span>
+  </div>
+  <div style="display:flex;gap:3px;flex-wrap:wrap;font-size:10px;margin-top:2px">
+   <span style="flex:1">Goal Rch<input id="goalReach" value="{{gr}}" style="width:100%;font-size:10px;padding:2px;margin:1px 0;background:#0f0f1a;border:1px solid#444;color:#eee"></span>
+   <span style="flex:1">Lookahead<input id="lookahead" value="{{la}}" style="width:100%;font-size:10px;padding:2px;margin:1px 0;background:#0f0f1a;border:1px solid#444;color:#eee"></span>
+  </div>
+  <button class="btn-plan" style="font-size:10px;padding:3px;margin-top:3px" onclick="location.href='/?wp='+document.getElementById('wpReach').value+'&gr='+document.getElementById('goalReach').value+'&la='+document.getElementById('lookahead').value+'&sh='+document.getElementById('shrink').value">Apply</button>
  </details>
  <button class="btn-go" onclick="doStep()">Step Forward</button>
  <button class="btn-go" id="btnSim" onclick="toggleSim()" style="background:#8b5cf6">Auto Sim</button>
@@ -48,7 +52,7 @@ canvas#cvp{display:block;width:100%}
  </div>
  <button class="btn-go" onclick="genVBS()" style="background:#6366f1">Generate VBS</button>
  <button class="btn-stop" onclick="location.reload()">Reset</button>
- <textarea id="vbsOut" style="display:none;width:100%;height:120px;background:#0f0f1a;border:1px solid#444;color:#0f0;font-size:9px;font-family:monospace;margin-top:4px" readonly></textarea>
+ <textarea id="vbsOut" style="width:100%;height:100px;background:#0f0f1a;border:1px solid#444;color:#0f0;font-size:8px;font-family:monospace;margin-top:4px;resize:vertical" readonly placeholder="Click Generate VBS..."></textarea>
  <div id="steps"><div id="stCap">Capt</div><div id="stTrk">Track</div><div id="stDec">Decide</div><div id="stMov">Move</div></div>
  <div id="log"></div>
  <div id="ob"></div>
@@ -166,7 +170,7 @@ async function genVBS(){
  let r=await fetch(BASE+'/vbs_template'); let tpl=await r.text();
  let vbs=tpl.replace(/{SX}/g,sx).replace(/{SY}/g,sy).replace(/{GX}/g,gx).replace(/{GY}/g,gy).replace(/{SPD}/g,spd).replace(/{DLY}/g,dly);
  let ta=document.getElementById('vbsOut');
- ta.style.display='block';ta.value=vbs;ta.select();
+ ta.value=vbs;ta.style.height='120px';ta.select();
  log('VBS ready','#0f0');
 }
 
