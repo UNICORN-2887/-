@@ -229,6 +229,8 @@ class NavigationServer:
         @self._app.route("/api/step", methods=["POST"])
         def step():
             data = request.get_json() or {}
+            if not self._nav.path:
+                return jsonify({"error": "no plan - click Plan Path first", "arrived": False})
             pos = (data.get("x", 0), data.get("y", 0))
             action = self._nav.step(pos)
             wp = self._nav.current_waypoint
