@@ -60,3 +60,4 @@ tools/*
 
 # 框架软著申请（含个人信息，不上传）
 General_Generator/软著申请/
+*.egg-info/

@@ -1,2 +1,0 @@
-[console_scripts]
-game-automator = game_automator.server:main
