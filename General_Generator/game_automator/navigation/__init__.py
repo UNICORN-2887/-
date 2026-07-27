@@ -236,7 +236,9 @@ class NavigationServer:
             data = request.get_json() or {}
             sx, sy = data.get("start", (0, 0))
             gx, gy = data.get("goal", (0, 0))
-            raw = self._nav.set_route((sx, sy), (gx, gy))
+            # Always plan fresh (don't rely on existing navigator state)
+            raw = self._pf.plan((int(sx), int(sy)), (int(gx), int(gy))) or []
+            self._nav._path = raw  # sync Navigator for step() calls
             path = [(int(x), int(y)) for x, y in raw]
             return jsonify({"path": path, "length": len(path)})
 
