@@ -197,7 +197,12 @@ function applyParams(){
  let gr=document.getElementById('goalReach').value;
  let la=document.getElementById('lookahead').value;
  let sh=document.getElementById('shrink').value;
- let url='/?wp='+wp+'&gr='+gr+'&la='+la+'&sh='+sh+'&sx='+start[0]+'&sy='+start[1]+'&gx='+goal[0]+'&gy='+goal[1];
+ // Read from input fields (always up to date)
+ let sxy=document.getElementById('startXY').value.split(',');
+ let gxy=document.getElementById('goalXY').value.split(',');
+ let sx=sxy[0]||start[0], sy=sxy[1]||start[1];
+ let gx=gxy[0]||goal[0], gy=gxy[1]||goal[1];
+ let url='/?wp='+wp+'&gr='+gr+'&la='+la+'&sh='+sh+'&sx='+sx+'&sy='+sy+'&gx='+gx+'&gy='+gy;
  location.href=url;
 }
 function toggleExt(){
