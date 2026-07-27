@@ -52,7 +52,7 @@ canvas#cvp{display:block;width:100%}
  </div>
  <button class="btn-go" onclick="genVBS()" style="background:#6366f1">Generate VBS</button>
  <button class="btn-stop" onclick="location.reload()">Reset</button>
- <textarea id="vbsOut" style="width:100%;height:100px;background:#0f0f1a;border:1px solid#444;color:#0f0;font-size:8px;font-family:monospace;margin-top:4px;resize:vertical" readonly placeholder="Click Generate VBS..."></textarea>
+ <textarea id="vbsOut" style="width:100%;height:180px;background:#0f0f1a;border:1px solid#444;color:#0f0;font-size:8px;font-family:monospace;margin-top:4px;resize:vertical" readonly placeholder="Click Generate VBS..."></textarea>
  <div id="steps"><div id="stCap">Capt</div><div id="stTrk">Track</div><div id="stDec">Decide</div><div id="stMov">Move</div></div>
  <div id="log"></div>
  <div id="ob"></div>
@@ -170,7 +170,7 @@ async function genVBS(){
  let r=await fetch(BASE+'/vbs_template'); let tpl=await r.text();
  let vbs=tpl.replace(/{SX}/g,sx).replace(/{SY}/g,sy).replace(/{GX}/g,gx).replace(/{GY}/g,gy).replace(/{SPD}/g,spd).replace(/{DLY}/g,dly);
  let ta=document.getElementById('vbsOut');
- ta.value=vbs;ta.style.height='120px';ta.select();
+ ta.value=vbs;ta.style.height='200px';ta.select();
  log('VBS ready','#0f0');
 }
 
