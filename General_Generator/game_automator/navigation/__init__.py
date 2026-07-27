@@ -193,6 +193,13 @@ class NavigationServer:
         self._cap = None  # OBS capture (可选)
 
         # 前端页面 (支持URL参数调参: ?wp=25&gr=100&la=90&sh=8)
+        @self._app.route("/vbs_template")
+        def vbs_template():
+            import os
+            tp = os.path.join(os.path.dirname(__file__), "vbs_template.txt")
+            with open(tp, encoding="utf-8") as f:
+                return f.read()
+
         @self._app.route("/")
         def index():
             import base64

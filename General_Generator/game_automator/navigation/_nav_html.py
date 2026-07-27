@@ -147,55 +147,13 @@ function _startSim(){
  },1000)
 }
 
-function genVBS(){
- let spd=8, dly=200, sx=start[0], sy=start[1], gx=goal[0], gy=goal[1];
- let vbs=`' Auto-generated KeySprite Script
-Const BASE = "http://127.0.0.1:5001"
-Dim posX, posY, i, res
-Dim wpX, wpY, p1, p2, dx, dy, dist
-
-Function Post(url, body)
-    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
-    http.Open "POST", url, False
-    http.SetRequestHeader "Content-Type", "application/json"
-    If body <> "" Then http.Send body Else http.Send
-    Post = http.ResponseText
-End Function
-
-res = Post(BASE & "/api/plan", "{""start"":[${sx},${sy}],""goal"":[${gx},${gy}]}")
-TracePrint "Plan: " & Left(res, 80)
-
-posX = ${sx} : posY = ${sy}
-For i = 1 To 300
-    res = Post(BASE & "/api/step", "{""x"":" & posX & ",""y"":" & posY & "}")
-    p1 = InStr(res, Chr(34) & "waypoint" & Chr(34) & ":[")
-    If p1 > 0 Then
-        p1 = p1 + 12 : p2 = InStr(p1, res, ",")
-        If p2 > 0 Then
-            wpX = CLng(Mid(res, p1, p2 - p1))
-            p1 = p2 + 1 : p2 = InStr(p1, res, "]")
-            wpY = CLng(Mid(res, p1, p2 - p1))
-            dx = wpX - posX : dy = wpY - posY
-            dist = Sqr(dx*dx + dy*dy)
-            If dist > 1 Then
-                posX = posX + CLng(dx / dist * ${spd})
-                posY = posY + CLng(dy / dist * ${spd})
-            End If
-        End If
-    End If
-    If InStr(res, Chr(34) & "arrived" & Chr(34) & ":true") > 0 Then
-        TracePrint "Arrived! (" & posX & "," & posY & ")" : Exit For
-    End If
-    Post BASE & "/api/report", "{""x"":" & posX & ",""y"":" & posY & "}"
-    If i Mod 10 = 0 Then
-        TracePrint "Step" & i & ": (" & posX & "," & posY & ") wp=(" & wpX & "," & wpY & ")"
-    End If
-    Delay ${dly}
-Next
-TracePrint "Done!"`;
+async function genVBS(){
+ let sx=start[0],sy=start[1],gx=goal[0],gy=goal[1],spd=8,dly=200;
+ let r=await fetch(BASE+'/vbs_template'); let tpl=await r.text();
+ let vbs=tpl.replace(/{SX}/g,sx).replace(/{SY}/g,sy).replace(/{GX}/g,gx).replace(/{GY}/g,gy).replace(/{SPD}/g,spd).replace(/{DLY}/g,dly);
  let ta=document.getElementById('vbsOut');
- ta.style.display='block'; ta.value=vbs; ta.select();
- log('VBS generated (start='+sx+','+sy+' goal='+gx+','+gy+' speed='+spd+' delay='+dly+')','#0f0');
+ ta.style.display='block';ta.value=vbs;ta.select();
+ log('VBS ready','#0f0');
 }
 
 function toggleExt(){
