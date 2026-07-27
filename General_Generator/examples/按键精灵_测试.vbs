@@ -1,7 +1,11 @@
 ' 按键精灵驱动浏览器导航
 ' 流程: 网页设起点→Plan Path→Ext Control→运行本脚本
 Const BASE = "http://127.0.0.1:5001"
-Dim posX, posY, act, res, i
+Dim posX
+Dim posY
+Dim act
+Dim res
+Dim i
 
 Function Post(url, body)
     Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
