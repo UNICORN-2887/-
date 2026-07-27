@@ -256,31 +256,27 @@ class NavigationServer:
                 "path_length": len(self._nav.path),
             })
 
-        # OBS 光流追踪
+        # OBS 模板匹配定位: 在OBS帧中搜索黄点位置
         @self._app.route("/api/track", methods=["POST"])
         def api_track():
+            import cv2, numpy as np
             if self._cap is None:
                 return jsonify({"error": "no capture"})
             frame = self._cap.read()
             if frame is None:
                 return jsonify({"error": "capture failed"})
-            if not hasattr(self, '_tracker'):
-                from game_automator.mapping import PositionTracker
-                self._tracker = PositionTracker.__new__(PositionTracker)
-                self._tracker._position = [0, 0]
-                self._tracker._crop = None
-                self._tracker._prev_gray = None
-                self._tracker._prev_pts = None
-                self._tracker._last_conf = 0.0
-                import cv2
-                self._tracker._lk_params = dict(winSize=(21,21), maxLevel=3,
-                    criteria=(cv2.TERM_CRITERIA_EPS|cv2.TERM_CRITERIA_COUNT,30,0.01))
-                self._tracker._feature_params = dict(maxCorners=200, qualityLevel=0.3,
-                    minDistance=15, blockSize=7)
-                self._tracker.init_tracking(frame)
-                return jsonify({"pos": [0,0], "conf": 0.0, "msg": "tracker init"})
-            pos, conf = self._tracker.update(frame)
-            return jsonify({"pos": [int(pos[0]), int(pos[1])], "conf": round(conf, 3)})
+            # 搜索黄色圆点 (HSV掩码)
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            lower = np.array([20, 100, 100])
+            upper = np.array([40, 255, 255])
+            mask = cv2.inRange(hsv, lower, upper)
+            moments = cv2.moments(mask)
+            if moments["m00"] > 0:
+                cx = int(moments["m10"] / moments["m00"])
+                cy = int(moments["m01"] / moments["m00"])
+                return jsonify({"pos": [cx, cy], "conf": 0.8,
+                    "method": "HSV yellow blob detection"})
+            return jsonify({"pos": [0, 0], "conf": 0.0, "method": "not found"})
 
         # OBS 实时预览
         @self._app.route("/api/capture")
@@ -424,15 +420,14 @@ async function toggleSim(){
     '<img src=\"data:image/jpeg;base64,'+cj.image+'\" style=\"width:100%;border:1px solid#555\">';
   }
 
-  // 2. TRACK: 光流追踪 → 更新模拟位置
+  // 2. TRACK: 在OBS帧中搜索黄点 → 作为真实位置
   flash('stTrk');
   let tr=await fetch(BASE+'/api/track',{method:'POST'});let tj=await tr.json();
-  if(tj.pos){
-   // 光流位移累积 (简化: 直接用追踪位移)
-   sim[0]+=tj.pos[0];sim[1]+=tj.pos[1];
-   sim[0]=Math.max(5,Math.min(895,sim[0])); // clamp
-   sim[1]=Math.max(5,Math.min(895,sim[1]));
-   log('Track: d=('+tj.pos[0]+','+tj.pos[1]+') conf='+tj.conf);
+  if(tj.pos && tj.conf > 0){
+   sim[0]=tj.pos[0]; sim[1]=tj.pos[1]; // OBS观测位置直接替换!
+   log('Track: found at ('+tj.pos[0]+','+tj.pos[1]+') '+tj.method);
+  } else {
+   log('Track: yellow dot not found in OBS frame');
   }
 
   // 3. DECIDE: 导航步进
