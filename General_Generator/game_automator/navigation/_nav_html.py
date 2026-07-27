@@ -144,17 +144,19 @@ async function doStep(){
 async let liveTimer=null;
 function toggleLiveView(){
  let b=document.getElementById('btnLive');
- if(liveTimer){clearInterval(liveTimer);liveTimer=null;b.textContent='Live OBS';b.style.background='#e90';return}
- b.textContent='Live ON';b.style.background='#0f0';
+ if(liveTimer){clearInterval(liveTimer);liveTimer=null;b.textContent='Live OBS';b.style.background='#e90';log('Live OBS stopped');return}
+ b.textContent='Live ON';b.style.background='#0f0';log('Live OBS started...');
  liveTimer=setInterval(async()=>{
-  let cr=await fetch(BASE+'/api/capture');let cj=await cr.json();
-  if(cj.image){
+  try{
+   let cr=await fetch(BASE+'/api/capture');let cj=await cr.json();
+   if(cj.error){document.getElementById('obsPreview').innerHTML='<div style=\"color:#f44;font-size:10px\">'+cj.error+'</div>';return}
+   if(!cj.image){return}
    let tr=await fetch(BASE+'/api/track',{method:'POST'});let tj=await tr.json();
-   let dxy=tj.dxy?('dXY=('+tj.dxy[0]+','+tj.dxy[1]+')'):'';
+   let dxy=tj.dxy?(' dXY=('+tj.dxy[0]+','+tj.dxy[1]+')'):'';
    document.getElementById('obsPreview').innerHTML=
-    '<img src="data:image/jpeg;base64,'+cj.image+'" style="width:100%;border:1px solid#555">'+
-    '<div style="font-size:9px;color:#0f0">'+cj.shape[0]+'x'+cj.shape[1]+' | '+tj.method+' '+dxy+' | conf='+tj.conf+'</div>';
-  }
+    '<img src=\"data:image/jpeg;base64,'+cj.image+'\" style=\"width:100%;border:1px solid#555\">'+
+    '<div style=\"font-size:9px;color:#0f0\">'+cj.shape[0]+'x'+cj.shape[1]+' | '+tj.method+dxy+' | conf='+tj.conf+'</div>';
+  }catch(e){log('Live OBS error: '+e)}
  },1500)
 }
 
