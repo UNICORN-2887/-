@@ -61,6 +61,8 @@ For i = 1 To 200
         Case "MOVE_SW": posX = posX - 4 : posY = posY + 4
     End Select
 
+    Post BASE & "/api/report", "{""x"":" & posX & ",""y"":" & posY & "}"
+
     If i Mod 10 = 0 Then
         TracePrint "Step" & i & ": (" & posX & "," & posY & ") " & act
     End If
