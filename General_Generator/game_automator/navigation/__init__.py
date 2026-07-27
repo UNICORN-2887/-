@@ -200,10 +200,13 @@ class NavigationServer:
             gr = request.args.get("gr", 100, type=int)
             la = request.args.get("la", 90, type=int)
             sh = request.args.get("sh", 8, type=int)
-            # 用新参数重建引擎
+            # 用新参数重建引擎 (保留已有路径)
+            old_path = self._nav.path if self._nav and not self._nav.arrived else []
             if self._reachable_path:
                 self._pf = Pathfinder(self._reachable_path, shrink=sh)
                 self._nav = Navigator(self._pf, waypoint_reach=wp, goal_reach=gr, lookahead=la)
+            if old_path:
+                self._nav._path = old_path
             map_b64 = ""
             if self._map_image:
                 try:
