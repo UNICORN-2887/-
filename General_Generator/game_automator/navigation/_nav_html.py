@@ -117,8 +117,9 @@ function drawAll(){
 }
 
 c.onclick=function(e){
- let r=c.getBoundingClientRect();let sc=c.width/(img?img.width:900);
- let mx=Math.round((e.clientX-r.left)/sc),my=Math.round((e.clientY-r.top)/sc);
+ let r=c.getBoundingClientRect();
+ let scX=(img?img.width:900)/c.width, scY=(img?img.height:900)/c.height;
+ let mx=Math.round((e.clientX-r.left)*scX),my=Math.round((e.clientY-r.top)*scY);
  if(e.shiftKey){goal=[mx,my];document.getElementById('goalXY').value=mx+','+my}
  else{start=[mx,my];sim=[mx,my];document.getElementById('startXY').value=mx+','+my;document.getElementById('simPos').value=mx+','+my}
  drawAll()
