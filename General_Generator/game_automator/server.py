@@ -25,6 +25,12 @@ def cmd_serve(args):
     map_img = args.map if hasattr(args, 'map') and args.map else None
     server = NavigationServer(pf, port=args.port, map_image=map_img)
     server._reachable_path = args.reachable
+    try:
+        from game_automator.capture import OBSVideoCapture
+        server._cap = OBSVideoCapture(cam_id=args.camera)
+        print(f"[OBS] capture ready (camera #{args.camera})")
+    except Exception as e:
+        print(f"[OBS] capture unavailable: {e}")
     print(f"地图: {args.reachable}")
     if map_img:
         import os

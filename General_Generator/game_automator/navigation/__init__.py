@@ -189,7 +189,8 @@ class NavigationServer:
         self._tracker_callback: Optional[Callable] = None
         self._map_image = map_image
         self._pf = pathfinder
-        self._reachable_path = None  # 用于动态重建
+        self._reachable_path = None
+        self._cap = None  # OBS capture (可选)
 
         # 前端页面 (支持URL参数调参: ?wp=25&gr=100&la=90&sh=8)
         @self._app.route("/")
@@ -255,6 +256,20 @@ class NavigationServer:
                 "path_length": len(self._nav.path),
             })
 
+        # OBS 实时预览
+        @self._app.route("/api/capture")
+        def api_capture():
+            import base64, cv2 as _cv
+            if self._cap is None:
+                return jsonify({"error": "no capture source"})
+            frame = self._cap.read()
+            if frame is None:
+                return jsonify({"error": "capture failed"})
+            _, buf = _cv.imencode(".jpg", frame, [_cv.IMWRITE_JPEG_QUALITY, 75])
+            return jsonify({"ok": True,
+                "image": base64.b64encode(buf).decode(),
+                "shape": list(frame.shape[:2])})
+
     def start(self, blocking: bool = True):
         print(f"[NavigationServer] http://127.0.0.1:{self._port}/  (前端)")
         self._app.run(host="127.0.0.1", port=self._port,
@@ -297,7 +312,9 @@ canvas{cursor:crosshair;display:block}
  <label>Sim Pos <input id="simPos" value="150,150"></label>
  <button class="btn-go" onclick="doStep()">Step &gt;&gt;</button>
  <button class="btn-stop" onclick="location.reload()">Reset</button>
+ <button class="btn-go" onclick="testOBS()" style="background:#f59e0b;color:#000">Test OBS</button>
  <div id="log"></div>
+ <div id="obsPreview" style="margin-top:8px"></div>
 </div>
 <div id="view"><canvas id="c"></canvas></div>
 <script>
@@ -306,6 +323,16 @@ let start=[150,150],goal=[750,750],path=[],sim=[150,150];
 const BASE='http://127.0.0.1:5001';
 const gw={{gw}},gh={{gh}};
 function log(m){let l=document.getElementById('log');l.innerHTML=m+'<br>'+l.innerHTML;}
+async function testOBS(){
+ log('Testing OBS...');
+ let r=await fetch(BASE+'/api/capture');
+ let j=await r.json();
+ if(j.error){log('OBS ERROR: '+j.error);return}
+ document.getElementById('obsPreview').innerHTML=
+  '<img src=\"data:image/jpeg;base64,'+j.image+'\" style=\"width:100%;border:1px solid#555;margin-top:4px\">'+
+  '<div style=\"font-size:10px;color:#888\">OBS: '+j.shape[0]+'x'+j.shape[1]+'</div>';
+ log('OBS OK: '+j.shape[0]+'x'+j.shape[1]);
+}
 
 // Load map or draw blank
 let mapB64='{{map_b64}}';
