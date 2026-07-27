@@ -261,10 +261,10 @@ class NavigationServer:
             self._external_pos = [data.get("x", 0), data.get("y", 0)]
             return jsonify({"ok": True, "pos": self._external_pos})
 
-        @self._app.route("/api/position")
+        @self._app.route("/api/position", methods=["GET", "POST"])
         def api_position():
             return jsonify({"pos": self._external_pos,
-                "posX": self._external_pos[0], "posY": self._external_pos[1]})
+                "posX": int(self._external_pos[0]), "posY": int(self._external_pos[1])})
 
         @self._app.route("/api/status")
         def status():

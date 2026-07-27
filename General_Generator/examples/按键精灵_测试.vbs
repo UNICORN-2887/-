@@ -1,11 +1,6 @@
-' 按键精灵驱动浏览器导航
-' 流程: 网页设起点→Plan Path→Ext Control→运行本脚本
+' 按键精灵自主驱动 - 无需网页配合, 自己规划+步进
 Const BASE = "http://127.0.0.1:5001"
-Dim posX
-Dim posY
-Dim act
-Dim res
-Dim i
+Dim posX, posY, act, res, i, pathLen
 
 Function Post(url, body)
     Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
@@ -21,9 +16,7 @@ Function GetV(json, key)
     If p = 0 Then GetV = "" : Exit Function
     p = p + Len(key) + 3
     If Mid(json, p, 1) = """" Then
-        p = p + 1
-        e = InStr(p, json, """")
-        GetV = Mid(json, p, e - p)
+        p = p + 1 : e = InStr(p, json, """") : GetV = Mid(json, p, e - p)
     Else
         e = p
         Do While Mid(json, e, 1) <> "," And Mid(json, e, 1) <> "}" And e < Len(json)
@@ -33,42 +26,44 @@ Function GetV(json, key)
     End If
 End Function
 
-Sub Report(px,py):Post BASE&"/api/report","{""x"":"&px&",""y"":"&py&"}":End Sub
+Function GetNum(json, key)
+    GetNum = Int(GetV(json, key))
+End Function
 
-' 读取网页设定的起点 (Ext Control 保存的)
-res = Post(BASE & "/api/position", "")
-posX = CLng(Trim(GetV(res, "posX")))
-posY = CLng(Trim(GetV(res, "posY")))
-If posX = 0 And posY = 0 Then posX = 150 : posY = 150 ' fallback
-TracePrint "Start pos: (" & posX & "," & posY & ")"
+' === 1. 规划 ===
+res = Post(BASE & "/api/plan", "{""start"":[150,150],""goal"":[750,750]}")
+pathLen = GetNum(res, "length")
+TracePrint "Plan: " & pathLen & " pts"
+If pathLen = 0 Then TracePrint "Plan FAILED" : WScript.Quit
 
-Report posX, posY
-
-For i = 1 To 120
+' === 2. 导航 ===
+posX = 150 : posY = 150
+For i = 1 To 200
     res = Post(BASE & "/api/step", "{""x"":" & posX & ",""y"":" & posY & "}")
     act = GetV(res, "action")
     If GetV(res, "arrived") = "true" Or act = "" Then
         TracePrint "Arrived! (" & posX & "," & posY & ")"
         Exit For
     End If
+    If GetV(res, "error") <> "" Then
+        TracePrint "Error: " & GetV(res, "error")
+        Exit For
+    End If
 
-    ' 按方向更新位置 (步长6px)
     Select Case act
-        Case "MOVE_N":  posY = posY - 6
-        Case "MOVE_S":  posY = posY + 6
-        Case "MOVE_W":  posX = posX - 6
-        Case "MOVE_E":  posX = posX + 6
+        Case "MOVE_N":  posY = posY - 5
+        Case "MOVE_S":  posY = posY + 5
+        Case "MOVE_W":  posX = posX - 5
+        Case "MOVE_E":  posX = posX + 5
         Case "MOVE_NE": posX = posX + 4 : posY = posY - 4
         Case "MOVE_NW": posX = posX - 4 : posY = posY - 4
         Case "MOVE_SE": posX = posX + 4 : posY = posY + 4
         Case "MOVE_SW": posX = posX - 4 : posY = posY + 4
     End Select
 
-    Report posX, posY
-
     If i Mod 10 = 0 Then
         TracePrint "Step" & i & ": (" & posX & "," & posY & ") " & act
     End If
-    Delay 300
+    Delay 200
 Next
 TracePrint "Done!"
