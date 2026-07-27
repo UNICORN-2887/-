@@ -395,28 +395,41 @@ async function testOBS(){
  log('OBS OK: '+j.shape[0]+'x'+j.shape[1]);
 }
 
-// Load map or draw blank
+// Viewport mode: 400x300 fixed canvas shows portion of 900x900 map centered on player
+const VW=400, VH=300;  // viewport size
+c.width=VW; c.height=VH;
 let mapB64='{{map_b64}}';
 if(mapB64){
  img=new Image();
- img.onload=function(){c.width=img.width;c.height=img.height;ctx.drawImage(img,0,0);drawOverlay()};
+ img.onload=function(){drawOverlay()};
  img.src='data:image/png;base64,'+mapB64;
-}else{
- c.width=900;c.height=900;ctx.fillStyle='#1a2a1a';ctx.fillRect(0,0,900,900);
- ctx.strokeStyle='#333';ctx.strokeRect(1,1,898,898);
- drawOverlay();
 }
 
-function toMap(e){let r=c.getBoundingClientRect();return[Math.round((e.clientX-r.left)*(img.naturalWidth/c.width)),Math.round((e.clientY-r.top)*(img.naturalHeight/c.height))]}
+function toMap(e){let r=c.getBoundingClientRect();return[Math.round(sim[0]+(e.clientX-r.left)-VW/2),Math.round(sim[1]+(e.clientY-r.top)-VH/2)]}
 c.onclick=function(e){let p=toMap(e);if(e.shiftKey){goal=p;document.getElementById('goalXY').value=p[0]+','+p[1]}else{start=p;sim=p.slice();document.getElementById('startXY').value=p[0]+','+p[1];document.getElementById('simPos').value=p[0]+','+p[1]} drawOverlay()}
 
 function drawOverlay(){
- ctx.drawImage(img,0,0);
- ctx.fillStyle='#0f0';ctx.beginPath();ctx.arc(start[0],start[1],8,0,Math.PI*2);ctx.fill();
- ctx.fillStyle='#00f';ctx.beginPath();ctx.arc(goal[0],goal[1],8,0,Math.PI*2);ctx.fill();
- for(let i=1;i<path.length;i++){ctx.strokeStyle='#3b82f6';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(path[i-1][0],path[i-1][1]);ctx.lineTo(path[i][0],path[i][1]);ctx.stroke()}
- ctx.fillStyle='#f00';ctx.beginPath();ctx.arc(sim[0],sim[1],12,0,Math.PI*2);ctx.fill();
- ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sim[0],sim[1],14,0,Math.PI*2);ctx.stroke();
+ ctx.fillStyle='#1a2a1a';ctx.fillRect(0,0,VW,VH);
+ if(!img || !img.width)return;
+ // 视口左上角在地图上的坐标
+ let vx=sim[0]-VW/2, vy=sim[1]-VH/2;
+ // draw map offset
+ ctx.drawImage(img, -vx, -vy);
+ // draw markers relative to viewport
+ function rx(x){return x-vx} function ry(y){return y-vy}
+ if(start){ctx.fillStyle='#0f0';ctx.beginPath();ctx.arc(rx(start[0]),ry(start[1]),6,0,Math.PI*2);ctx.fill()}
+ if(goal){ctx.fillStyle='#00f';ctx.beginPath();ctx.arc(rx(goal[0]),ry(goal[1]),6,0,Math.PI*2);ctx.fill()}
+ for(let i=1;i<path.length;i++){
+  ctx.strokeStyle='#3b82f6';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(rx(path[i-1][0]),ry(path[i-1][1]));ctx.lineTo(rx(path[i][0]),ry(path[i][1]));ctx.stroke()
+ }
+ // player dot at CENTER of viewport (always)
+ ctx.fillStyle='#f00';ctx.beginPath();ctx.arc(VW/2,VH/2,10,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(VW/2,VH/2,12,0,Math.PI*2);ctx.stroke();
+ // crosshair
+ ctx.strokeStyle='#fff';ctx.lineWidth=1;
+ ctx.beginPath();ctx.moveTo(VW/2-20,VH/2);ctx.lineTo(VW/2+20,VH/2);ctx.stroke();
+ ctx.beginPath();ctx.moveTo(VW/2,VH/2-20);ctx.lineTo(VW/2,VH/2+20);ctx.stroke();
 }
 
 async function doPlan(){
