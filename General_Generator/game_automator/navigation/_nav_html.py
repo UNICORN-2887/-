@@ -29,6 +29,13 @@ canvas#cvp{display:block;width:100%}
  <label>Start <input id="startXY" value="150,150"></label>
  <label>Goal <input id="goalXY" value="150,750"></label>
  <button class="btn-plan" onclick="doPlan()">Plan Path</button>
+ <details open style="margin:2px 0"><summary style="color:#0ff;font-size:12px;cursor:pointer">Navigation Params</summary>
+  <div style="font-size:10px;color:#aaa;margin:2px 0">Shrink <input id="shrink" value="{{sh}}" style="width:50px;float:right"></div>
+  <div style="font-size:10px;color:#aaa;margin:2px 0">WP Reach <input id="wpReach" value="{{wp}}" style="width:50px;float:right"></div>
+  <div style="font-size:10px;color:#aaa;margin:2px 0">Goal Reach <input id="goalReach" value="{{gr}}" style="width:50px;float:right"></div>
+  <div style="font-size:10px;color:#aaa;margin:2px 0">Lookahead <input id="lookahead" value="{{la}}" style="width:50px;float:right"></div>
+  <button class="btn-plan" style="margin-top:4px" onclick="location.href='/?wp='+document.getElementById('wpReach').value+'&gr='+document.getElementById('goalReach').value+'&la='+document.getElementById('lookahead').value+'&sh='+document.getElementById('shrink').value">Apply Nav Params</button>
+ </details>
  <button class="btn-go" onclick="doStep()">Step Forward</button>
  <button class="btn-go" id="btnSim" onclick="toggleSim()" style="background:#8b5cf6">Auto Sim</button>
  <button class="btn-vp" onclick="testOBS()">Test OBS</button>
