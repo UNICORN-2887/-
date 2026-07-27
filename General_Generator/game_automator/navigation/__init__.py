@@ -315,10 +315,10 @@ class NavigationServer:
         def api_capture():
             import base64, cv2 as _cv
             if self._cap is None:
-                return jsonify({"error": "no capture source"})
+                return jsonify({"error": "no OBS camera. Open OBS Studio, add Window Capture of browser, start Virtual Camera"})
             frame = self._cap.read()
             if frame is None:
-                return jsonify({"error": "capture failed"})
+                return jsonify({"error": "OBS frame read failed. Is OBS Virtual Camera started?"})
             _, buf = _cv.imencode(".jpg", frame, [_cv.IMWRITE_JPEG_QUALITY, 75])
             return jsonify({"ok": True,
                 "image": base64.b64encode(buf).decode(),
