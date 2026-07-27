@@ -256,6 +256,32 @@ class NavigationServer:
                 "path_length": len(self._nav.path),
             })
 
+        # OBS 光流追踪
+        @self._app.route("/api/track", methods=["POST"])
+        def api_track():
+            if self._cap is None:
+                return jsonify({"error": "no capture"})
+            frame = self._cap.read()
+            if frame is None:
+                return jsonify({"error": "capture failed"})
+            if not hasattr(self, '_tracker'):
+                from game_automator.mapping import PositionTracker
+                self._tracker = PositionTracker.__new__(PositionTracker)
+                self._tracker._position = [0, 0]
+                self._tracker._crop = None
+                self._tracker._prev_gray = None
+                self._tracker._prev_pts = None
+                self._tracker._last_conf = 0.0
+                import cv2
+                self._tracker._lk_params = dict(winSize=(21,21), maxLevel=3,
+                    criteria=(cv2.TERM_CRITERIA_EPS|cv2.TERM_CRITERIA_COUNT,30,0.01))
+                self._tracker._feature_params = dict(maxCorners=200, qualityLevel=0.3,
+                    minDistance=15, blockSize=7)
+                self._tracker.init_tracking(frame)
+                return jsonify({"pos": [0,0], "conf": 0.0, "msg": "tracker init"})
+            pos, conf = self._tracker.update(frame)
+            return jsonify({"pos": [int(pos[0]), int(pos[1])], "conf": round(conf, 3)})
+
         # OBS 实时预览
         @self._app.route("/api/capture")
         def api_capture():
@@ -313,6 +339,7 @@ canvas{cursor:crosshair;display:block}
  <button class="btn-go" onclick="doStep()">Step &gt;&gt;</button>
  <button class="btn-stop" onclick="location.reload()">Reset</button>
  <button class="btn-go" onclick="testOBS()" style="background:#f59e0b;color:#000">Test OBS</button>
+ <button class="btn-go" id="btnSim" onclick="toggleSim()" style="background:#8b5cf6;color:#fff">Auto Sim</button>
  <div id="log"></div>
  <div id="obsPreview" style="margin-top:8px"></div>
 </div>
@@ -369,5 +396,34 @@ async function doStep(){
  if(j.waypoint){let dx=j.waypoint[0]-sim[0],dy=j.waypoint[1]-sim[1];let d=Math.sqrt(dx*dx+dy*dy);let spd=20;if(d>0){sim[0]=Math.round(sim[0]+dx/d*spd);sim[1]=Math.round(sim[1]+dy/d*spd)}}
  document.getElementById('simPos').value=sim[0]+','+sim[1];
  log('Step: '+j.action+' pos=('+sim[0]+','+sim[1]+')');drawOverlay();
+}
+let simTimer=null;
+async function toggleSim(){
+ let b=document.getElementById('btnSim');
+ if(simTimer){clearInterval(simTimer);simTimer=null;b.textContent='Auto Sim';b.style.background='#8b5cf6';log('Sim stopped');return}
+ b.textContent='Running...';b.style.background='#ef4444';
+ // 先规划
+ if(!path.length) await doPlan();
+ if(!path.length){log('No path!');return}
+ log('Auto sim started - point OBS at this window');
+ simTimer=setInterval(async()=>{
+  // 1. OBS capture → 2. step → 3. move dot
+  let cr=await fetch(BASE+'/api/capture');let cj=await cr.json();
+  if(cj.image){
+   document.getElementById('obsPreview').innerHTML=
+    '<img src=\"data:image/jpeg;base64,'+cj.image+'\" style=\"width:100%;border:1px solid#555\">';
+  }
+  let r=await fetch(BASE+'/api/step',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({x:sim[0],y:sim[1]})});
+  let j=await r.json();
+  if(j.arrived||!j.action){toggleSim();log('Auto arrived!');return}
+  if(j.waypoint){
+   let dx=j.waypoint[0]-sim[0],dy=j.waypoint[1]-sim[1];
+   let d=Math.sqrt(dx*dx+dy*dy),spd=15;
+   if(d>0){sim[0]=Math.round(sim[0]+dx/d*spd);sim[1]=Math.round(sim[1]+dy/d*spd)}
+  }
+  document.getElementById('simPos').value=sim[0]+','+sim[1];
+  drawOverlay();
+ },800);
 }
 </script></body></html>"""
