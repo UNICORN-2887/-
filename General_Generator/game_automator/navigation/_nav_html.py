@@ -42,7 +42,10 @@ canvas#cvp{display:block;width:100%}
  </details>
  <button class="btn-go" onclick="doStep()">Step Forward</button>
  <button class="btn-go" id="btnSim" onclick="toggleSim()" style="background:#8b5cf6">Auto Sim</button>
- <button class="btn-vp" onclick="testOBS()">Test OBS</button>
+ <div style="display:flex;gap:3px;align-items:center">
+  <select id="camSel" onchange="setCam(this.value)" style="flex:1;font-size:9px;padding:2px;background:#0f0f1a;border:1px solid#444;color:#eee"></select>
+  <button class="btn-vp" onclick="testOBS()" style="width:auto;padding:5px 8px;font-size:10px">Test</button>
+ </div>
  <button class="btn-vp" id="btnLive" onclick="toggleLive()" style="background:#e90;color:#000">Live OBS</button>
  <button class="btn-ext" onclick="toggleExt()">Ext Control</button>
  <div class="info" style="margin-top:4px">VBS speed/delay:</div>
@@ -72,6 +75,16 @@ let c=document.getElementById('c'),ctx=c.getContext('2d');
 let cvp=document.getElementById('cvp'),vctx=cvp.getContext('2d');
 
 function log(m,c){let l=document.getElementById('log');l.innerHTML='<span'+(c?' style=color:'+c:'')+'>'+m+'</span><br>'+l.innerHTML;if(l.children.length>30)l.lastChild.remove()}
+async function loadCams(){
+ let r=await fetch(BASE+'/api/cameras');let j=await r.json();
+ let s=document.getElementById('camSel');s.innerHTML='';
+ j.cameras.forEach(c=>{s.innerHTML+='<option value='+c.id+'>'+(c.obs?'[OBS] ':'')+c.name+'</option>'})
+}
+async function setCam(id){
+ await fetch(BASE+'/api/set_camera',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cam_id:parseInt(id)})});
+ log('Camera set to #'+id,'#0f0')
+}
+loadCams();
 function flash(id){let e=document.getElementById(id);e.style.background='#0f0';setTimeout(()=>e.style.background='#333',400)}
 
 // Map image

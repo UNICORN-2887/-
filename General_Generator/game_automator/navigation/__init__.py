@@ -193,6 +193,20 @@ class NavigationServer:
         self._cap = None  # OBS capture (可选)
 
         # 前端页面 (支持URL参数调参: ?wp=25&gr=100&la=90&sh=8)
+        @self._app.route("/api/cameras")
+        def api_cameras():
+            from game_automator.capture import OBSVideoCapture
+            cams = OBSVideoCapture.list_cameras()
+            return jsonify({"cameras": [{"id": i, "name": n, "obs": "obs" in n.lower()} for i, n in cams]})
+
+        @self._app.route("/api/set_camera", methods=["POST"])
+        def api_set_camera():
+            data = request.get_json() or {}
+            cam_id = data.get("cam_id", 1)
+            from game_automator.capture import OBSVideoCapture
+            self._cap = OBSVideoCapture(cam_id=cam_id)
+            return jsonify({"ok": True, "cam_id": cam_id})
+
         @self._app.route("/vbs_template")
         def vbs_template():
             import os
