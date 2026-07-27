@@ -256,7 +256,7 @@ class NavigationServer:
                 "path_length": len(self._nav.path),
             })
 
-        # OBS 模板匹配定位: 在OBS帧中搜索黄点位置
+        # 局部LK光流: 只在黄点周围追踪
         @self._app.route("/api/track", methods=["POST"])
         def api_track():
             import cv2, numpy as np
@@ -265,18 +265,48 @@ class NavigationServer:
             frame = self._cap.read()
             if frame is None:
                 return jsonify({"error": "capture failed"})
-            # 搜索黄色圆点 (HSV掩码)
+            if not hasattr(self, '_tk'):
+                self._tk = {'prev_gray': None, 'prev_pts': None, 'pos': [0,0]}
+                self._tk['lk'] = dict(winSize=(21,21), maxLevel=3,
+                    criteria=(cv2.TERM_CRITERIA_EPS|cv2.TERM_CRITERIA_COUNT,30,0.001))
+                self._tk['ft'] = dict(maxCorners=100, qualityLevel=0.1,
+                    minDistance=10, blockSize=7)
+
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            # 先用HSV找黄点大致位置
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            lower = np.array([20, 100, 100])
-            upper = np.array([40, 255, 255])
-            mask = cv2.inRange(hsv, lower, upper)
-            moments = cv2.moments(mask)
-            if moments["m00"] > 0:
-                cx = int(moments["m10"] / moments["m00"])
-                cy = int(moments["m01"] / moments["m00"])
-                return jsonify({"pos": [cx, cy], "conf": 0.8,
-                    "method": "HSV yellow blob detection"})
-            return jsonify({"pos": [0, 0], "conf": 0.0, "method": "not found"})
+            mask = cv2.inRange(hsv, np.array([20,80,80]), np.array([40,255,255]))
+            M = cv2.moments(mask)
+            if M["m00"] > 10:
+                cx = int(M["m10"]/M["m00"]); cy = int(M["m01"]/M["m00"])
+                # 在黄点周围 200x200 区域做光流
+                r = 100
+                x1 = max(0,cx-r); y1 = max(0,cy-r)
+                x2 = min(gray.shape[1]-1,cx+r); y2 = min(gray.shape[0]-1,cy+r)
+                roi = gray[y1:y2, x1:x2]
+                if roi.size > 0:
+                    if self._tk['prev_gray'] is None:
+                        self._tk['prev_gray'] = roi
+                        self._tk['prev_pts'] = cv2.goodFeaturesToTrack(roi, mask=None, **self._tk['ft'])
+                        self._tk['pos'] = [cx, cy]
+                        return jsonify({"pos": [cx,cy], "conf":0.5, "method":"LK init"})
+                    # LK光流追踪
+                    next_pts, status, _ = cv2.calcOpticalFlowPyrLK(
+                        self._tk['prev_gray'], roi, self._tk['prev_pts'], None, **self._tk['lk'])
+                    if next_pts is not None and len(next_pts) >= 4:
+                        good_new = next_pts[status==1]; good_old = self._tk['prev_pts'][status==1]
+                        if len(good_new) >= 4:
+                            dx = np.median(good_new[:,0]-good_old[:,0])
+                            dy = np.median(good_new[:,1]-good_old[:,1])
+                            self._tk['pos'][0] -= int(dx)
+                            self._tk['pos'][1] -= int(dy)
+                            self._tk['prev_gray'] = roi
+                            self._tk['prev_pts'] = good_new.reshape(-1,1,2) if len(good_new)>=50 else cv2.goodFeaturesToTrack(roi, mask=None, **self._tk['ft'])
+                            return jsonify({"pos": self._tk['pos'], "conf": len(good_new)/max(len(self._tk['prev_pts']),1),
+                                "method": f"LK flow dx={dx:.1f} dy={dy:.1f}"})
+            # fallback
+            return jsonify({"pos": self._tk['pos'] if self._tk['pos'] else [0,0], "conf":0.0, "method":"no motion"})
 
         # OBS 实时预览
         @self._app.route("/api/capture")
