@@ -5,7 +5,7 @@ _NAV_HTML = r"""<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font:14px sans-serif;background:#1a1a2e;color:#eee;display:flex;height:100vh}
-#panel{width:280px;background:#1e1e2e;border-right:1px solid#333;padding:10px;display:flex;flex-direction:column;gap:6px;overflow-y:auto}
+#panel{width:280px;min-width:200px;max-width:500px;resize:horizontal;overflow:auto;background:#1e1e2e;padding:10px;display:flex;flex-direction:column;gap:6px}
 #panel h2{color:#0ff;font-size:15px}
 .info{color:#888;font-size:10px}
 #panel input{width:100%;padding:4px;background:#0f0f1a;border:1px solid#444;color:#eee;font-size:11px}
