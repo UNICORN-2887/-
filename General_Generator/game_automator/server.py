@@ -26,6 +26,11 @@ def cmd_serve(args):
     map_img = args.map if hasattr(args, 'map') and args.map else None
     server = NavigationServer(pf, port=args.port, map_image=map_img)
     print(f"地图: {args.reachable}")
+    if map_img:
+        import os
+        print(f"前端地图: {map_img} ({os.path.getsize(map_img)} bytes)")
+    else:
+        print(f"前端地图: (无)")
     print(f"摄像头: OBS #{args.camera}")
     server.start()
 
